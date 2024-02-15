@@ -1,0 +1,1 @@
+If the datasets are large, keep them on the server and include the folder names in .gitignore to avoid pushing them to Github.
