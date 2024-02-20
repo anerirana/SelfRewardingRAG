@@ -1,9 +1,6 @@
 import torch
 import torch.nn as nn
-from torchtyping import TensorType
-from beartype import beartype
-from beartype.typing import Optional, Callable
-from typing import List
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 # Utilities
 def exists(val):
@@ -12,53 +9,14 @@ def exists(val):
 def default(val, default_value):
     return val if exists(val) else default_value
 
-
-class QueryAugmentationModel(nn.Module):
-    @beartype
-    def __init__(self, qa_prompt: str, config: dict):
-        '''The model produces n similar queries to a given query q
-
-        Parameters:
-        -----------
-        
-        ModelParams
-            Model hyperparameters to be used during training
-        '''
-        super(QueryAugmentationModel, self).__init__()
-        self.qa_prompt = qa_prompt
-        self.ModelParams = default(config.get('ModelParams'), {})
-
-    @beartype
-    def forward(self, original_query: str) -> List[str]:
-        '''Returns n similar queries to the original query
-
-        Parameters:
-        -----------
-        original_query
-            The original query to pass as input in the prompt
-        '''
-        
-        augmented_queries = [original_query + ' augmented'] * 10
-        return augmented_queries
-
-    @beartype
-    def train(self, training_dataset: Optional[torch.utils.data.Dataset]):
-        '''Train the QAModel with the given preference pairs
-
-        Parameters:
-        -----------
-        training_dataset
-            Contians the augmented query preference pairs used for training
-        '''
-        
-        pass
-
 class RAGModel(nn.Module):
-    def __init__(self, config: dict):
+    def __init__(self, model_name):
         super(RAGModel, self).__init__()
         '''Retrival Augmented Generation model to generate responses for a given query 
         and a set of retieved documents
         '''
+        self.tokenizer = T5Tokenizer.from_pretrained(model_name)
+        self.model = T5ForConditionalGeneration.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
 
     def forward(self, prompt):
         '''Generate response for the given prompt
@@ -69,7 +27,10 @@ class RAGModel(nn.Module):
             The prompt used as input to the generative model.
             Could be a RAG or QA or reward prompt.
         '''
-        pass
+        input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to("cuda")
+        outputs = self.model.generate(input_ids)
+
+        return self.tokenizer.decode(outputs[0])
 
     def train(self, training_dataset, batch_size=32, num_epochs=3):
         '''Train the RAGModel on the given training_dataset
@@ -155,7 +116,7 @@ class DocumentRetrievalModel:
     def __init__(self):
         # Initialize components specific to Document Retrieval
               
-    def forward(self, query: str) -> list:
+    def forward(self, query: str) -> []:
         # Logic to retrieve and return a list of documents based on the query
         # Placeholder implementation
         return ["doc1", "doc2", "doc3"]  # Example output
