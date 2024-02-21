@@ -111,12 +111,3 @@ class PreferencePairGenerator:
         '''generate the second preference pair matrix
         '''
         return []  # Placeholder for another matrix
-    
-class DocumentRetrievalModel:
-    def __init__(self):
-        # Initialize components specific to Document Retrieval
-              
-    def forward(self, query: str) -> []:
-        # Logic to retrieve and return a list of documents based on the query
-        # Placeholder implementation
-        return ["doc1", "doc2", "doc3"]  # Example output
