@@ -15,12 +15,12 @@ class DocumentRetrievalModel:
         all_results = RAG.search(query=queries, k=5)
         top_k_documents = []
         all_documents = []
-        for result in all_results:
+        for result in all_results:          
             for x in result:
-                all_documents.append(x['content'], x['rank']) 
+                all_documents.append(x['document'], x['rank']) 
             
         top_k_documents.append(self.reciprocal_rank_fusion(all_documents))
-        return top_k_documents
+        return top_k_documents, all_documents
     
     def reciprocal_rank_fusion(self, rank_list, k=60):
         '''
