@@ -79,36 +79,43 @@ class RAGPipeline:
         document_retrieval_model = DocumentRetrievalModel()   
         pp_generator = PreferencePairGenerator(rag_model)
 
-        all_queries = []
-        all_responses = []
-        all_docs = []
-        all_rewards = []
+        aug_queries = np.asarray([])
+        all_documents = np.asarray([])
+        top_documents = np.asarray([])
+        all_responses = np.asarray([])
+        all_rewards = np.asarray([])
+        contributing_documents = {}
         frist_pps = []
         qa_prompt = self.create_qa_prompt(self.qa_prompt_template, original_query)
-        for i in range(m):
+
+        for i in range(self.m):
             queries = rag_model(qa_prompt)
-            top_k_documents, all_documents = document_retrieval_model(queries)
+            top_k_docs, all_docs = document_retrieval_model(queries)
 
-            rag_prompt = self.create_rag_prompt(self.rag_prompt_template, original_query, top_k_documents)
-            responses = rag_model(rag_prompt, queries, top_k_documents)
-            responses = self.parser(responses)
-
+            rag_prompt = self.create_rag_prompt(self.rag_prompt_template, original_query, top_k_docs)
+            responses = rag_model(rag_prompt, queries, top_k_docs)
+            responses, contri_docs = self.parser(responses,i)
+                 
             rewards = [rag_model(self.create_reward_prompt_template(response)) for response in responses.keys]
+
             pp1 = pp_generator.generateFirstPP(rag_prompt, responses.keys, rewards)
 
             frist_pps.append(pp1)
-            all_queries.append(queries)
-            all_responses.append(responses)
-            all_docs.append(top_k_documents)
-            all_rewards.append(rewards)
+
+            aug_queries = np.vtsack((aug_queries, queries))
+            all_documents = np.vtsack((all_documents, all_docs))
+            top_documents = np.vtsack((top_documents, top_k_docs))
+            all_responses = np.vstack((all_responses, responses))
+            all_rewards = np.vstack((all_rewards, rewards))
+            contributing_documents.update(contri_docs)
         
-        pp2 = pp_generator.generateSecondPP(qa_prompt, all_queries, all_responses, all_docs, all_rewards)
+        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
         
         #TODO: load pp1 and pp2 in a dataset loader for training
         rag_model.train()
         
             
-    def parser(self, responses):
+    def parser(self, responses,index):
         return {}
     
     def create_reward_prompt_template(self, response):
@@ -131,6 +138,55 @@ class PreferencePairGenerator:
             RAG model to generate responses and corresponding rewards
         '''
         self.rag_model = rag_model
+    
+    def get_document_rewards(rho, winning_answers, top_documents, contributing_documents):
+        reward_docs = np.asarray([])
+        for i, top_docs in enumerate(top_documents):
+            if rho[i] < 0:
+                reward_docs = np.vstack(reward_docs, np.full(len(top_docs), np.nan()))
+            else:
+                rewards = np.array([rho[i] if doc in contributing_documents[i][winning_answers[i]] else 0 for doc in top_docs])
+                reward_docs = np.vstack(reward_docs, rewards)
+
+        reward_docs = np.array(reward_docs)
+        return reward_docs     
+    
+    def get_augment_query_rewards(all_documents, document_rewards, top_documents, rho, aug_queries):
+        rewards_aug_query = []
+        
+        for i in range(aug_queries.shape[0]):
+            if rho[i] < 0:
+                # Set the entire row to NaN if rho[i] is negative
+                rewards_aug_query.append([np.nan] * aug_queries.shape[1])
+            else:
+                z = []
+                for j in range(aug_queries.shape[1]):
+                    p = 0
+                    for h, top_doc in enumerate(top_documents[i]):
+                        if top_doc in all_documents[i][j]:
+                            index_in_all_docs = np.where(all_documents[i][j] == top_doc)
+                            p += document_rewards[i][h] / (index_in_all_docs + 1)
+                    if p > 0:
+                      z.append(p)
+                    else:
+                        z.append(np.nan)
+                rewards_aug_query.append(z)
+        
+        # Convert list of lists to a NumPy array
+        rewards_aug_query = np.array(rewards_aug_query)
+
+        return rewards_aug_query
+    
+    def agg_query_rewards(self, aug_query_rewards, aug_queries):
+        unique_queries = np.unique(aug_queries)  
+        agg_query_rewards = {}
+
+        for query in unique_queries:
+            indices = np.where(aug_queries == query)
+            avg_reward = np.mean(aug_query_rewards[indices], axis=0)
+            if avg_reward > 0:
+              agg_query_rewards[query] = avg_reward
+        return agg_query_rewards
 
     def generateFirstPP(self, prompt, responses, rewards):
         '''Generates the first preference pair matrix
@@ -143,7 +199,26 @@ class PreferencePairGenerator:
         
         return (prompt, responses[max_idx], responses[min_idx])  # Placeholder for a matrix
 
-    def generateSecondPP(self, qa_prompt, queries, responses, docs, rewards):
+    def generateSecondPP(self, qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents):
         '''generate the second preference pair matrix
+        
         '''
-        return []  # Placeholder for another matrix
+        rho = np.max(all_rewards, axis=1)
+        # rho normalize
+        rho = rho - np.mean(rho)
+        winning_answers = np.argmax(all_rewards, axis=1)
+        document_rewards = self.get_document_rewards(rho, winning_answers, all_documents,top_documents,contributing_documents)
+        aug_query_rewards = self.get_augment_query_rewards(all_documents, document_rewards, top_documents,rho,aug_queries)
+        agg_query_rewards = self.agg_query_rewards(aug_query_rewards, aug_queries)
+
+        unique_queries = len(agg_query_rewards.keys())
+        pairs = []
+        for i in range(len(unique_queries)):
+            for j in range(i + 1, len(unique_queries)):
+                query1, query2 = unique_queries[i], unique_queries[i]
+                reward1, reward2 = agg_query_rewards.get(query1), agg_query_rewards.get(query2)
+                if reward1 > reward2:
+                    pairs.append((qa_prompt, query1, query2))
+                else:
+                    pairs.append((qa_prompt, query2, query1))
+        return pairs
