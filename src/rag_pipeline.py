@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 import DocumentRetrievalModel 
+from constants import *
 
 # Utilities
 def exists(val):
@@ -11,9 +12,9 @@ def exists(val):
 def default(val, default_value):
     return val if exists(val) else default_value
 
-class RAGModel(nn.Module):
+class LLM(nn.Module):
     def __init__(self, model_name):
-        super(RAGModel, self).__init__()
+        super(LLM, self).__init__()
         '''Retrival Augmented Generation model to generate responses for a given query 
         and a set of retieved documents
         '''
@@ -60,9 +61,7 @@ class RAGPipeline:
         num_documents
             Numnber of docuemts to retrieve per query by the Document Retrieval Model 
         '''
-        self.rag_prompt_template = default(config.get('QAPromptTemplate'), 'Default Prompt')
         self.reward_prompt_template = default(config.get('RewardPromptTemplate'), 'Default Prompt')
-        self.qa_prompt_template = default(config.get('QAPromptTemplate'), 'Default Prompt')
         self.num_documents = default(config.get('NumberOfRetrievedDocuments'), 'Default Prompt')
         self.m = default(config.get('NumberOfQuerySets'), 'Default Prompt')
 
@@ -75,9 +74,9 @@ class RAGPipeline:
             The original query to generate responses for
         '''
         # Create instances of required models
-        rag_model = RAGModel()
+        language_model = LLM()
         document_retrieval_model = DocumentRetrievalModel()   
-        pp_generator = PreferencePairGenerator(rag_model)
+        pp_generator = PreferencePairGenerator(language_model)
 
         aug_queries = np.asarray([])
         all_documents = np.asarray([])
@@ -85,51 +84,78 @@ class RAGPipeline:
         all_responses = np.asarray([])
         all_rewards = np.asarray([])
         contributing_documents = {}
-        frist_pps = []
-        qa_prompt = self.create_qa_prompt(self.qa_prompt_template, original_query)
+        first_pps = []
 
         for i in range(self.m):
-            queries = rag_model(qa_prompt)
+            queries = self.extract_query_samples(language_model, original_query, n=5)
+
             top_k_docs, all_docs = document_retrieval_model(queries)
 
-            rag_prompt = self.create_rag_prompt(self.rag_prompt_template, original_query, top_k_docs)
-            responses = rag_model(rag_prompt, queries, top_k_docs)
+            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = top_k_docs)
+
+            #TODO: Need to sample from the language model to get l answers
+            responses = language_model.forward(rag_prompt)
+
             responses, contri_docs = self.parser(responses,i)
                  
-            rewards = [rag_model(self.create_reward_prompt_template(response)) for response in responses.keys]
+            rewards = [language_model(self.create_reward_prompt_template(response)) for response in responses.keys]
 
             pp1 = pp_generator.generateFirstPP(rag_prompt, responses.keys, rewards)
 
-            frist_pps.append(pp1)
+            first_pps.append(pp1)
 
-            aug_queries = np.vtsack((aug_queries, queries))
-            all_documents = np.vtsack((all_documents, all_docs))
-            top_documents = np.vtsack((top_documents, top_k_docs))
+            aug_queries = np.vstack((aug_queries, queries))
+            all_documents = np.vstack((all_documents, all_docs))
+            top_documents = np.vstack((top_documents, top_k_docs))
             all_responses = np.vstack((all_responses, responses))
             all_rewards = np.vstack((all_rewards, rewards))
             contributing_documents.update(contri_docs)
         
-        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
+        pp2 = pp_generator.generateSecondPP(self.qa_prompt_template.format(original_query), aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
         
         #TODO: load pp1 and pp2 in a dataset loader for training
-        rag_model.train()
+        language_model.train()
         
             
-    def parser(self, responses,index):
+    def parser(self, responses, index):
         return {}
     
     def create_reward_prompt_template(self, response):
         return ''
     
-    def create_rag_prompt(self, rag_prompt_template, original_query, documents):
-        return ''
-    
-    def create_qa_prompt(self, qa_prompt_template, original_query):
-        return ''
+    def extract_query_samples(self, language_model, original_query, n=5):
+        '''
+        Extracts query samples from the language model
+        '''
+
+        qa_prompt = self.qa_prompt_template.format(n, original_query)
+        max_tries = 5
+        response = ""
+        j = 0
+        sanity_check = False
+
+        while j < max_tries and sanity_check == False:
+            j += 1
+            response = language_model.forward(qa_prompt)
+            sanity_check = True
+            for i in range(1, n+1):
+                if f"{i}." not in response:
+                    sanity_check = False
+                    break
+        
+        queries = response.split(qa_prompt)[-1] #Remove the prompt from the response
+        queries = queries.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
+        
+        for i in range(1, n+1):
+            queries = queries.replace(f"{i}.", "")
+        
+        queries = queries.strip().split("\n") #Split the response into a list of queries
+
+        return queries
 
 
 class PreferencePairGenerator:
-    def __init__(self, rag_model: RAGModel):
+    def __init__(self, rag_model: LLM):
         '''Generate preference pairs for a training loop of RAG pipeline
 
         Parameters:
