@@ -210,8 +210,7 @@ class PreferencePairGenerator:
         for query in unique_queries:
             indices = np.where(aug_queries == query)
             avg_reward = np.mean(aug_query_rewards[indices], axis=0)
-            if avg_reward > 0:
-              agg_query_rewards[query] = avg_reward
+            agg_query_rewards[query] = avg_reward
         return agg_query_rewards
 
     def generateFirstPP(self, prompt, responses, rewards):
