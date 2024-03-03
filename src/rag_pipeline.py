@@ -67,10 +67,10 @@ class RAGPipeline:
             # #TODO: Need to sample from the language model to get l answers
             responses = []
 
-            for temp in range(1,6):
-              r = language_model.forward(rag_prompt, temp*0.1)
+            for j in range(self.l):
+              r = language_model.forward(rag_prompt)
               print(r)
-              r = r.split(rag_prompt)[-1].replace("<s>", "").replace("</s>", "").replace("<pad>", "")
+            #   r = r.split(rag_prompt)[-1].replace("<s>", "").replace("</s>", "").replace("<pad>", "")
               responses.append(r)
             
             # print(responses)

@@ -27,7 +27,7 @@ class LLM(nn.Module):
         encoded = self.tokenizer.apply_chat_template(messages, return_tensors="pt")
         inputs = encoded.to(self.model.device)     
         
-        outputs = self.model.generate(inputs, temperature=temp, top_k=0, top_p=1.0, repetition_penalty=1.4, min_new_tokens=1024, max_new_tokens=4096, do_sample=True)
+        outputs = self.model.generate(inputs, temperature=temp, top_k=0, top_p=1.0, repetition_penalty=1.4, min_new_tokens=400, max_new_tokens=4096, do_sample=True)
         
         return self.tokenizer.decode(outputs[0])
 
