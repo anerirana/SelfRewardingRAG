@@ -1,6 +1,11 @@
 QUERY_AUGMENTATION_PROMPT = "Give {n} different versions of the query: {original_query}"
 
-RAG_PROMPT = "You are a financial document expert. Answer this question : \"{original_query}\" only using information from the following extracts: {documents}. Clearly highlight which extracts were needed in the answer."
+RAG_PROMPT = """You are a financial document expert. 
+
+- Answer this question : \"{original_query}\" only using information from the following extracts: {documents}. 
+- Clearly highlight which extracts were needed in the answer by ending the response with the extract number in square brackets.
+
+"""
 
 REWARD_PROMPT = """Review the user's question and the corresponding response using the additive 5-point scoring system described below. Points are accumulated based on the satisfaction of each criterion:
 - Add 1 point if the response is relevant and provides some information related to the user's inquiry, even if it is incomplete or contains some irrelevant content.
