@@ -14,7 +14,7 @@ class LLM(nn.Module):
                     device_map="auto")                        
         self.model = torch.compile(self.model, mode = "max-autotune", backend="inductor")
     
-    def forward(self, prompt, temp=0.5):
+    def forward(self, prompt, temp=0.3):
         '''Generate response for the given prompt
 
         Parameters:
@@ -27,7 +27,7 @@ class LLM(nn.Module):
         encoded = self.tokenizer.apply_chat_template(messages, return_tensors="pt")
         inputs = encoded.to(self.model.device)     
         
-        outputs = self.model.generate(inputs, temperature=temp, top_k=0, top_p=1.0, repetition_penalty=1.4, min_new_tokens=600, max_new_tokens=4096, do_sample=True)
+        outputs = self.model.generate(inputs, temperature=temp, top_k=0, top_p=1.0, repetition_penalty=1.4, min_new_tokens=100, max_new_tokens=4096, do_sample=True)
         
         return self.tokenizer.decode(outputs[0])
 
