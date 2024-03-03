@@ -12,3 +12,24 @@ extracts = {
     # 'extract_11': "is made to the Credit Agreement dated as of February 28, 2012 (as amended, restated, supplemented or otherwise modiﬁed from time to time, the “Credit Agreement”), among Facebook, Inc., a Delaware corporation (the “Borrower”), the Lenders party thereto and JPMorgan Chase Bank, N.A., as the Administrative Agent. Capitalized terms used but not otherwise deﬁned herein shall have the meanings speciﬁed in the Credit Agreement. Any Permitted Subordinated Indebtedness shall be expressly subordinated to the', 'chunk(s)_658-659': 'liquidation, reorganization, insolvency, receivership or a similar proceeding with respect to, or any dissolution or winding-up of, the applicable Credit Party;",
     # 'extract_12': "(b) such Indebtedness shall provide that no direct or indirect payment in respect of such Indebtedness (including payments of interest or principal and the repurchase, redemption, defeasance or other acquisition of such Indebtedness) shall be made (i) during the continuance of any Default or Event of Default in the payment of the principal of or interest on the Obligations and (ii) in the event a Change in Control shall have occurred, until a Notice of Change in Control shall have been delivered by the Borrower and all the outstanding Loans of all Lenders that shall have exercised the right referred to in Section 2.11(b) of the Credit Agreement have been paid in full and the Commitments, if any, of such Lenders have terminated; (c) such Indebtedness shall contain customary standstill provisions for a period of 179 days during the continuance of'}"
 }
+
+sample_answer = """
+Based on the given credit agreement, the key numerical aspect of limiting indebtedness includes several constraints on what types of debts can be taken on, how much money can be spent on certain activities, and when new subsidiaries can join existing ones. Here's a breakdown of these limits:
+
+[Extract_1]
+The Borrower cannot create, incur, assume, or allow to exist any Indebtedness without permission from the lenders.
+Indebtedness allowed include those created under the Credit Documents and the Bridge Facility, loans between the Borrower and its own subsidiaries, guaranteed loans made by the Borrower or its subsidiaries, sale/leaseback transactions up to $750 million, refinanced debt up to $750 million, and financing used to acquire fixed assets up to $3 billion per year.
+There are also rules about what happens to guarantees made by the Borrower or its subsidiaries, but they don't seem directly tied to numbers themselves.
+
+[Extract_2]
+Guaranties made by the Borrower or its subsidiaries must meet certain criteria before being accepted.
+For example, no guarantee may cover permissible subordinate debt unless it complies with certain requirements set out elsewhere in the contract. Similarly, no guaranty covering non-permissive indentedness may be valid unless it meets certain standards established by law or industry practice.
+Again, while some parts of this section do involve numeric amounts ($750 million), most focus more on qualifications rather than hard limits.
+
+[Extract_3]
+This provision sets strict limits on the total amount of debt the Borrower can carry at once, both overall and specifically for different categories of debt.
+In general, the maximum level of unsecured debt the Borrower can hold is $3 billion, although there are lower caps for secured debt and special situations like sales/leases back transactions.
+These limits apply regardless of whether the debt was acquired through purchase, issuance, or another means.
+
+Overall, then, the main limitation on indebtedness appears to come from Extract_3, which imposes absolute ceilings on various forms of debt based on their type and timing. While the other extracts offer guidelines and preferences regarding acceptable levels of debt, none appear to impose actual numerical limits beyond what's already stated in Extract_3.
+"""
