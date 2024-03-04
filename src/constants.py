@@ -13,7 +13,7 @@ Knowledge Base: {documents}.
 #Rules to answer:
 - Provide a concise response to the user's question.
 - The response should be in bullet points. 
-- Clearly highlight which extracts from knowledge base were used to answer the question.
+- Last bullet point should be "Extracts used: [extract numbers]"
 
 """
 
