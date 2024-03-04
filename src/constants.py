@@ -8,11 +8,11 @@ RAG_PROMPT = """You are a financial document expert.
 
 Question : \"{original_query}\"
 
-Knowledge: {documents}. 
+Knowledge Base: {documents}. 
 
 #Rules to answer:
 - Provide a detailed and comprehensive response to the user's question. 
-- Clearly highlight which extracts were used to answer the question.
+- Clearly highlight which extracts from knowledge base were used to answer the question.
 
 """
 
