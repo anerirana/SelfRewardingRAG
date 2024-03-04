@@ -71,21 +71,24 @@ RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
 start_time = time.time()
 z=[]
 my_documents=[]
-with open('/home/samvegvipuls_umass_edu/CA_links.txt', 'r') as file:
-    for line in file:
-        print(line)
-        line = line.strip()  # Remove newline character
-        document_content = get_wikipedia_page(line)
-        if document_content:  # Add content to the list if it's not None
-            my_documents.append(document_content)
+# with open('/home/samvegvipuls_umass_edu/CA_links.txt', 'r') as file:
+#     for line in file:
+#         print(line)
+#         line = line.strip()  # Remove newline character
+#         document_content = get_wikipedia_page(line)
+#         if document_content:  # Add content to the list if it's not None
+#             my_documents.append(document_content)
 
-file_path = '/home/samvegvipuls_umass_edu/outputs_final.txt'
+document_content = get_wikipedia_page("https://www.sec.gov/Archives/edgar/data/1326801/000119312512101422/d287954dex1014.htm")
+        
+file_path = '/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/fb_agreement.txt'
 
 # Writing the array to a file
 with open(file_path, 'w') as file:
-    for item in my_documents:
-        file.write("%s\n" % item)
-index_path = RAG.index(index_name="/home/samvegvipuls_umass_edu/test_indexing3", collection=my_documents)
+    file.write(document_content)
+    # for item in my_documents:
+    #     file.write("%s\n" % item)
+index_path = RAG.index(index_name="/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/index_1", collection=document_content)
 
 end_time = time.time()
 excution_time = end_time - start_time
