@@ -58,7 +58,7 @@ class RAGPipeline:
         first_pps = []
 
         for i in range(self.m):
-            queries = self.extract_query_samples(language_model, original_query, n=self.n)
+            # queries = self.extract_query_samples(language_model, original_query, n=self.n)
 
             # top_k_docs, all_docs = document_retrieval_model.forward(queries)
 
@@ -69,10 +69,11 @@ class RAGPipeline:
 
             for j in range(self.l):
               r = language_model.forward(rag_prompt)
+              r = r.split("[/INST]")[-1].replace("</s>", "").replace("<pad>", "")
               print(r)
             #   r = r.split(rag_prompt)[-1].replace("<s>", "").replace("</s>", "").replace("<pad>", "")
-              responses.append(r)
-              r2 = language_model.forward(REWARD_PROMPT.format(original_query = original_query, answer = sample_answer))
+            #   responses.append(r)
+              r2 = language_model.forward(REWARD_PROMPT.format(original_query = original_query, answer = r))
               print(r2)
             
             # print(responses)
@@ -128,7 +129,7 @@ class RAGPipeline:
             print(response)
             sanity_check = True
             for i in range(1, n+1):
-                if f"{i}." not in response or f"{i})" not in response:
+                if f"{i}." not in response:
                     sanity_check = False
                     break
         print(response)

@@ -6,8 +6,13 @@ QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {or
 
 RAG_PROMPT = """You are a financial document expert. 
 
-- Answer this question : \"{original_query}\" only using information from the following extracts: {documents}. 
-- Clearly highlight which extracts were needed in the answer by ending the response with the extract number in square brackets.
+Question : \"{original_query}\"
+
+Knowledge: {documents}. 
+
+#Rules to answer:
+- Provide a detailed and comprehensive response to the user's question. 
+- Clearly highlight which extracts were used to answer the question.
 
 """
 
