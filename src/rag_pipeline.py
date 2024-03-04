@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers import T5Tokenizer, T5ForConditionalGeneration
-import DocumentRetrievalModel 
+from transformers import T5Tokenizer, T5ForConditionalGeneration,AutoTokenizer,AutoModelForCausalLM
+from document_retriver import DocumentRetrievalModel 
 from constants import *
 
 # Utilities
@@ -18,9 +18,16 @@ class LLM(nn.Module):
         '''Retrival Augmented Generation model to generate responses for a given query 
         and a set of retieved documents
         '''
-        self.tokenizer = T5Tokenizer.from_pretrained(model_name)
-        self.model = T5ForConditionalGeneration.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16)
-
+        self.tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1",
+                    trust_remote_code=True,
+                    device_map="auto",
+                    load_in_8bit=True,# For 8 bit quantization,
+                    max_memory={0:"15GB"})
+                    
+        
+        self.model = torch.compile(self.model, mode = "max-autotune", backend="inductor")
     def forward(self, prompt):
         '''Generate response for the given prompt
 
@@ -30,8 +37,8 @@ class LLM(nn.Module):
             The prompt used as input to the generative model.
             Could be a RAG or QA or reward prompt.
         '''
-        input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to("cuda")
-        outputs = self.model.generate(input_ids)
+        input_ids = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)       
+        outputs = self.model.generate(**input_ids, top_k=0, top_p=1.0, repetition_penalty=1.4, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
 
         return self.tokenizer.decode(outputs[0])
 
@@ -62,8 +69,10 @@ class RAGPipeline:
             Numnber of docuemts to retrieve per query by the Document Retrieval Model 
         '''
         self.reward_prompt_template = default(config.get('RewardPromptTemplate'), 'Default Prompt')
-        self.num_documents = default(config.get('NumberOfRetrievedDocuments'), 'Default Prompt')
-        self.m = default(config.get('NumberOfQuerySets'), 'Default Prompt')
+        self.num_documents = default(config.get('NumberOfRetrievedDocuments'), 5)
+        self.m = default(config.get('NumberOfQuerySets'), 2)
+        self.n = default(config.get('NumberOfAugementedQueries'), 5)
+        self.base_model = default(config.get('BaseModel'), 'google/flan-t5-xxl')
 
     def train(self, original_query):
         '''Executes a training loop of the RAGPipeline
@@ -74,39 +83,40 @@ class RAGPipeline:
             The original query to generate responses for
         '''
         # Create instances of required models
-        language_model = LLM()
+        language_model = LLM(self.base_model)
         document_retrieval_model = DocumentRetrievalModel()   
         pp_generator = PreferencePairGenerator(language_model)
 
-        aug_queries = np.asarray([])
-        all_documents = np.asarray([])
-        top_documents = np.asarray([])
+        aug_queries = []
+        all_documents = []
+        top_documents = []
         all_responses = np.asarray([])
         all_rewards = np.asarray([])
         contributing_documents = {}
         first_pps = []
 
         for i in range(self.m):
-            queries = self.extract_query_samples(language_model, original_query, n=5)
+            queries = self.extract_query_samples(language_model, original_query, n=self.n)
 
-            top_k_docs, all_docs = document_retrieval_model(queries)
+            top_k_docs, all_docs = document_retrieval_model.forward(queries)
 
             rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = top_k_docs)
 
             #TODO: Need to sample from the language model to get l answers
             responses = language_model.forward(rag_prompt)
 
-            responses, contri_docs = self.parser(responses,i)
+            responses, contri_docs = self.parser_responses(responses,i)
                  
-            rewards = [language_model(self.create_reward_prompt_template(response)) for response in responses.keys]
+            rewards = [language_model(REWARD_PROMPT.format(original_query = original_query, answer = response)) for response in responses.keys]
+            rewards = self.parser_rewards(rewards,i)
+
 
             pp1 = pp_generator.generateFirstPP(rag_prompt, responses.keys, rewards)
 
             first_pps.append(pp1)
-
-            aug_queries = np.vstack((aug_queries, queries))
-            all_documents = np.vstack((all_documents, all_docs))
-            top_documents = np.vstack((top_documents, top_k_docs))
+            aug_queries.append(queries)
+            all_documents.append(all_docs)           
+            top_documents.append(top_k_docs[0])
             all_responses = np.vstack((all_responses, responses))
             all_rewards = np.vstack((all_rewards, rewards))
             contributing_documents.update(contri_docs)
@@ -115,9 +125,10 @@ class RAGPipeline:
         
         #TODO: load pp1 and pp2 in a dataset loader for training
         language_model.train()
-        
-            
-    def parser(self, responses, index):
+          
+    def parser_responses(self, responses, index):
+        return {}
+    def parser_rewards(self, rewards, index):
         return {}
     
     def create_reward_prompt_template(self, response):
@@ -128,7 +139,7 @@ class RAGPipeline:
         Extracts query samples from the language model
         '''
 
-        qa_prompt = self.qa_prompt_template.format(n, original_query)
+        qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=n, original_query=original_query)
         max_tries = 5
         response = ""
         j = 0
@@ -232,7 +243,7 @@ class PreferencePairGenerator:
         # rho normalize
         rho = rho - np.mean(rho)
         winning_answers = np.argmax(all_rewards, axis=1)
-        document_rewards = self.get_document_rewards(rho, winning_answers, all_documents,top_documents,contributing_documents)
+        document_rewards = self.get_document_rewards(rho, winning_answers,top_documents,contributing_documents)
         aug_query_rewards = self.get_augment_query_rewards(all_documents, document_rewards, top_documents,rho,aug_queries)
         agg_query_rewards = self.agg_query_rewards(aug_query_rewards, aug_queries)
 
