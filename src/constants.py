@@ -11,7 +11,8 @@ Question : \"{original_query}\"
 Knowledge Base: {documents}. 
 
 #Rules to answer:
-- Provide a detailed and comprehensive response to the user's question. 
+- Provide a concise response to the user's question.
+- The response should be in bullet points. 
 - Clearly highlight which extracts from knowledge base were used to answer the question.
 
 """
