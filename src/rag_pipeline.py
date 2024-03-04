@@ -143,6 +143,7 @@ class RAGPipeline:
             queries = queries.replace(f"{i}.", "")
         
         queries = queries.strip().split("\n") #Split the response into a list of queries
+        queries = [q for q in queries if (q != "\r" or q != "\n")]
         print(queries)
         #todo sanity check size of queries
         return queries
