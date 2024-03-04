@@ -33,7 +33,7 @@ class RAGPipeline:
         self.num_documents = default(config.get('NumberOfRetrievedDocuments'), 5)
         self.m = default(config.get('NumberOfQuerySets'), 1)
         self.n = default(config.get('NumberOfAugementedQueries'), 5)
-        self.l = default(config.get('NumberOfSampledResponses'),5)
+        self.l = default(config.get('NumberOfSampledResponses'),1)
         self.base_model = default(config.get('BaseModel'), 'google/flan-t5-xxl')
 
     def train(self, original_query):
@@ -58,12 +58,12 @@ class RAGPipeline:
         first_pps = []
 
         for i in range(self.m):
-            # queries = self.extract_query_samples(language_model, original_query, n=self.n)
+            queries = self.extract_query_samples(language_model, original_query, n=self.n)
 
-            # top_k_docs, all_docs = document_retrieval_model.forward(queries)
+            top_k_docs, all_docs = document_retrieval_model.forward(queries)
 
-            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = extracts)
-
+            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = top_k_docs)
+            print(rag_prompt)
             # #TODO: Need to sample from the language model to get l answers
             responses = []
 
@@ -74,7 +74,7 @@ class RAGPipeline:
               print("---------------------------------------------------")
             #   r = r.split(rag_prompt)[-1].replace("<s>", "").replace("</s>", "").replace("<pad>", "")
             #   responses.append(r)
-              r2 = language_model.forward(REWARD_PROMPT.format(original_query = original_query, answer = ideal_answer))
+              r2 = language_model.forward(REWARD_PROMPT.format(original_query = original_query, answer = r))
               r2 = r2.split("[/INST]")[-1].replace("</s>", "").replace("<pad>", "")
               print(r2)
               print("---------------------------------------------------")
@@ -135,14 +135,14 @@ class RAGPipeline:
                 if f"{i}." not in response:
                     sanity_check = False
                     break
+
         print(response)
-        queries = response.split(qa_prompt)[-1] #Remove the prompt from the response
-        queries = queries.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
+        queries = response.split("[/INST]")[-1].replace("</s>", "").replace("<pad>", "") #Remove the prompt from the response
         
         for i in range(1, n+1):
             queries = queries.replace(f"{i}.", "")
-            queries = queries.replace(f"{i})", "")
         
         queries = queries.strip().split("\n") #Split the response into a list of queries
+        print(queries)
         #todo sanity check size of queries
         return queries
