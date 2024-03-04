@@ -68,7 +68,7 @@ class RAGPipeline:
             responses = []
 
             for j in range(self.l):
-              r = language_model.forward(rag_prompt, min_new_tokens=200)
+              r = language_model.forward(rag_prompt, min_new_tokens=400)
               r = r.split("[/INST]")[-1].replace("</s>", "").replace("<pad>", "")
               print(r)
               print("---------------------------------------------------")
