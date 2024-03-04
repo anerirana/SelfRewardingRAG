@@ -1,4 +1,4 @@
-QUERY_AUGMENTATION_PROMPT = """Give {n} different versions of the query: {original_query}. 
+QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {original_query}. 
 
 - Each version of the query should be distinct and relevant to the original query.
 - Itemize each query with a number and a period (e.g. "1. ").
