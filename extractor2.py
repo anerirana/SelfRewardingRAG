@@ -71,7 +71,7 @@ RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
 start_time = time.time()
 z=[]
 my_documents=[]
-with open('/home/samvegvipuls_umass_edu/CA_links.txt', 'r') as file:
+with open('./CA_links.txt', 'r') as file:
     for line in file:
         print(line)
         line = line.strip()  # Remove newline character
@@ -79,15 +79,15 @@ with open('/home/samvegvipuls_umass_edu/CA_links.txt', 'r') as file:
         if document_content:  # Add content to the list if it's not None
             my_documents.append(document_content)
 
-file_path = '/home/samvegvipuls_umass_edu/outputs_final.txt'
-
-# Writing the array to a file
-with open(file_path, 'w') as file:
-    for item in my_documents:
-        file.write("%s\n" % item)
-index_path = RAG.index(index_name="/home/samvegvipuls_umass_edu/test_indexing3", collection=my_documents)
+# file_path = './outputs_final.txt'
+# # Writing the array to a file
+# with open(file_path, 'w') as file:
+#     for item in my_documents:
+#         file.write("%s\n" % item)
+print("Number of indexed documents: ", len(my_documents))
+index_path = RAG.index(index_name="./credit_agreement_database", collection=my_documents)
 
 end_time = time.time()
-excution_time = end_time - start_time
+execution_time = end_time - start_time
 
 print(f"Execution time: {execution_time} seconds")

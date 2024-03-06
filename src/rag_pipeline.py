@@ -19,16 +19,13 @@ class LLM(nn.Module):
         and a set of retieved documents
         '''
         self.tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1",
                     trust_remote_code=True,
-                    device_map="auto",
-                    load_in_8bit=True,# For 8 bit quantization,
-                    max_memory={0:"15GB"})
+                    device_map="auto")
                     
         
         self.model = torch.compile(self.model, mode = "max-autotune", backend="inductor")
-    def forward(self, prompt):
+    def forward(self, prompt, param_dict=None):
         '''Generate response for the given prompt
 
         Parameters:
@@ -37,8 +34,11 @@ class LLM(nn.Module):
             The prompt used as input to the generative model.
             Could be a RAG or QA or reward prompt.
         '''
-        input_ids = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)       
-        outputs = self.model.generate(**input_ids, top_k=0, top_p=1.0, repetition_penalty=1.4, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+        input_ids = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)    
+        if param_dict is None:
+            outputs = self.model.generate(**input_ids, temperature=0.2, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+        else:
+            outputs = self.model.generate(**input_ids, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
 
         return self.tokenizer.decode(outputs[0])
 
@@ -70,8 +70,9 @@ class RAGPipeline:
         '''
         self.reward_prompt_template = default(config.get('RewardPromptTemplate'), 'Default Prompt')
         self.num_documents = default(config.get('NumberOfRetrievedDocuments'), 5)
-        self.m = default(config.get('NumberOfQuerySets'), 2)
+        self.m = default(config.get('NumberOfQuerySets'), 5)
         self.n = default(config.get('NumberOfAugementedQueries'), 5)
+        self.l = default(config.get('NumberOfResponses'), 5)
         self.base_model = default(config.get('BaseModel'), 'google/flan-t5-xxl')
 
     def train(self, original_query):
@@ -87,6 +88,8 @@ class RAGPipeline:
         document_retrieval_model = DocumentRetrievalModel()   
         pp_generator = PreferencePairGenerator(language_model)
 
+        qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n, original_query=original_query)
+
         aug_queries = []
         all_documents = []
         top_documents = []
@@ -96,20 +99,18 @@ class RAGPipeline:
         first_pps = []
 
         for i in range(self.m):
-            queries = self.extract_query_samples(language_model, original_query, n=self.n)
+            queries = self.extract_query_samples(language_model, qa_prompt)
 
             top_k_docs, all_docs = document_retrieval_model.forward(queries)
 
             rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = top_k_docs)
 
             #TODO: Need to sample from the language model to get l answers
-            responses = language_model.forward(rag_prompt)
+            responses = self.get_query_responses(language_model, rag_prompt)
 
             responses, contri_docs = self.parser_responses(responses,i)
                  
-            rewards = [language_model(REWARD_PROMPT.format(original_query = original_query, answer = response)) for response in responses.keys]
-            rewards = self.parser_rewards(rewards,i)
-
+            rewards = [self.get_rewards(language_model, original_query, response) for response in responses.keys]
 
             pp1 = pp_generator.generateFirstPP(rag_prompt, responses.keys, rewards)
 
@@ -121,25 +122,34 @@ class RAGPipeline:
             all_rewards = np.vstack((all_rewards, rewards))
             contributing_documents.update(contri_docs)
         
-        pp2 = pp_generator.generateSecondPP(self.qa_prompt_template.format(original_query), aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
-        
+        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
         #TODO: load pp1 and pp2 in a dataset loader for training
         language_model.train()
           
+    def get_query_responses(self, language_model, rag_prompt):
+      responses = []
+      for i in range(self.l):
+          responses.append(language_model.forward(rag_prompt, DECODE_PARAMS_DICT))
+      return responses    
+
     def parser_responses(self, responses, index):
         return {}
-    def parser_rewards(self, rewards, index):
-        return {}
+
+    def get_rewards(self, rewards, language_model, original_query, response):
+        # TODO: add retry logic if parsing fails
+        reward_response = language_model.forward(REWARD_PROMPT.format(original_query = original_query, answer = response))
+        match = re.search("Final Score: ([0-9]+) out of 5", s)
+        reward = match.group(1) if match else None
+        return reward
     
     def create_reward_prompt_template(self, response):
         return ''
     
-    def extract_query_samples(self, language_model, original_query, n=5):
+    def extract_query_samples(self, language_model, qa_prompt):
         '''
         Extracts query samples from the language model
         '''
 
-        qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=n, original_query=original_query)
         max_tries = 5
         response = ""
         j = 0
@@ -147,9 +157,9 @@ class RAGPipeline:
 
         while j < max_tries and sanity_check == False:
             j += 1
-            response = language_model.forward(qa_prompt)
+            response = language_model.forward(qa_prompt, DECODE_PARAMS_DICT)
             sanity_check = True
-            for i in range(1, n+1):
+            for i in range(1, self.n+1):
                 if f"{i}." not in response:
                     sanity_check = False
                     break
@@ -157,7 +167,7 @@ class RAGPipeline:
         queries = response.split(qa_prompt)[-1] #Remove the prompt from the response
         queries = queries.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
         
-        for i in range(1, n+1):
+        for i in range(1, self.n+1):
             queries = queries.replace(f"{i}.", "")
         
         queries = queries.strip().split("\n") #Split the response into a list of queries

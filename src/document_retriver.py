@@ -11,7 +11,7 @@ class DocumentRetrievalModel:
     def forward(self, queries):
         # Logic to retrieve and return a list of documents based on the query
         # Placeholder implementation
-        path_to_index = "/home/samvegvipuls_umass_edu/test_indexing_testing"
+        path_to_index = "../.ragatouille/colbert/indexes/credit_agreement_database"
         RAG = RAGPretrainedModel.from_index(path_to_index)
         all_results = RAG.search(query=queries, k=5)
         top_k_documents = []
@@ -20,7 +20,7 @@ class DocumentRetrievalModel:
         for result in all_results:          
             row = []      
             for x in result:
-                row.append(x['document'])
+                row.append(x['content'])
                 all_ranks.append(x['rank'])               
             all_documents.append(row)
             
