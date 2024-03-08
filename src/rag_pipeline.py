@@ -34,13 +34,16 @@ class LLM(nn.Module):
         -----------
         prompt
             The prompt used as input to the generative model.
-            Could be a RAG or QA or reward prompt.
+            Could be a RAG or QA or reward prompt.'
         '''
-        input_ids = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)    
+        messages = [{"role":"user", "content":prompt}]
+        encoded = self.tokenizer.apply_chat_template(messages, return_tensors="pt")
+        inputs = encoded.to(self.model.device)
+        # input_ids = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)    
         if param_dict is None:
-            outputs = self.model.generate(**input_ids, temperature=0.2, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+            outputs = self.model.generate(inputs, temperature=0.2, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
         else:
-            outputs = self.model.generate(**input_ids, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
+            outputs = self.model.generate(inputs, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
 
         return self.tokenizer.decode(outputs[0])
 
@@ -109,8 +112,12 @@ class RAGPipeline:
 
             #TODO: Need to sample from the language model to get l answers
             responses = self.get_query_responses(language_model, rag_prompt)
+            print(responses)
             print("responses got")
-            contri_docs = [top_k_docs]*self.l
+            print("dimension of top k")
+            print(self.find_list_dimensions(top_k_docs))
+
+            contri_docs = top_k_docs*self.l
             # responses, contri_docs = self.parser_responses(responses,i)                
                  
             rewards = [self.get_rewards(language_model, original_query, response) for response in responses]
@@ -158,6 +165,11 @@ class RAGPipeline:
         print("first_pps: ")
         print(str(self.find_list_dimensions(first_pps)))
 
+        
+        
+
+        
+        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
         with open("./output.txt","w") as f:
             f.write("aug_queries: ")
 
@@ -181,10 +193,10 @@ class RAGPipeline:
             f.write("first_pps: ")
             f.write(str(first_pps))
             f.write(">>"*100)
-        
+            f.write("second pp")
+            f.write(str(pp2))
+            f.write(">>"*100)
 
-        
-        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
         #TODO: load pp1 and pp2 in a dataset loader for training
         
         language_model.train()
@@ -197,11 +209,21 @@ class RAGPipeline:
     def get_query_responses(self, language_model, rag_prompt):
         responses = []
         for i in range(self.l):
-            r=language_model(rag_prompt, DECODE_PARAMS_DICT)
-            r = r.split(rag_prompt)[-1] #Remove the prompt from the response
-            r = r.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
+            text=language_model(rag_prompt, DECODE_PARAMS_DICT)
+            print("The type is")
+            print(text)
+            print(type(text))
+            answer_index = text.find("documents you used to answer the question.")
+            # If "\nAnswer:" is found, extract the text after it
+            if answer_index != -1:
+                text = text[answer_index + len('documents you used to answer the question.')+1]  # +8 to skip past the "\nAnswer:" part
+            # else:
+            #     return "The string '\nAnswer:' was not found in the text."
 
-            responses.append(r)
+            # r = r.split(rag_prompt)[-1] #Remove the prompt from the response
+            # r = r.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
+
+            responses.append(text)
        
     
         return responses    
@@ -280,6 +302,9 @@ class PreferencePairGenerator:
     
     def get_document_rewards(self, rho, winning_answers, top_documents, contributing_documents):
         reward_docs = None
+        print("RHO value is")
+        print(rho)  
+        # print()
         for i, top_docs in enumerate(top_documents):
             if rho[i] < 0:
                 new_rewards = np.full(len(top_docs), np.nan)
@@ -290,28 +315,39 @@ class PreferencePairGenerator:
                 reward_docs = new_rewards
             else:
                 reward_docs = np.vstack([reward_docs, new_rewards])
-
+        # print("REWARDS")
+        # print(reward_docs)
+        # print(reward_docs.shape)
         return reward_docs     
     
-    def get_augment_query_rewards(all_documents, document_rewards, top_documents, rho, aug_queries):
+    def get_augment_query_rewards(self,all_documents, document_rewards, top_documents, rho, aug_queries):
+        # print(top_documents)
         rewards_aug_query = []
         
-        for i in range(aug_queries.shape[0]):
+
+        
+        for i in range(0,len(aug_queries)):
             if rho[i] < 0:
                 # Set the entire row to NaN if rho[i] is negative
-                rewards_aug_query.append([np.nan] * aug_queries.shape[1])
+                rewards_aug_query.append([np.nan] * len(aug_queries[1]))
             else:
                 z = []
-                for j in range(aug_queries.shape[1]):
+                for j in range(len(aug_queries[i])):
                     p = 0
                     for h, top_doc in enumerate(top_documents[i]):
-                        if top_doc in all_documents[i][j]:
+                        top_doc=repr(top_doc)
+                        # print(top_doc)
+                        # print(all_documents[i][j])
+                        if top_doc in all_documents[i][j] and len(top_doc)>0:
+                            print("HII")
+                            print()
                             index_in_all_docs = np.where(all_documents[i][j] == top_doc)
-                            p += document_rewards[i][h] / (index_in_all_docs + 1)
+                            print(index_in_all_docs)
+                            p += document_rewards[i][h] / (index_in_all_docs[0][0] + 1)
                     if p > 0:
-                      z.append(p)
+                        z.append(p)
                     else:
-                        z.append(np.nan)
+                        z.append(0)
                 rewards_aug_query.append(z)
         
         # Convert list of lists to a NumPy array
@@ -322,9 +358,13 @@ class PreferencePairGenerator:
     def agg_query_rewards(self, aug_query_rewards, aug_queries):
         unique_queries = np.unique(aug_queries)  
         agg_query_rewards = {}
+        print(aug_queries)
+        aug_queries=np.array(aug_queries)
 
         for query in unique_queries:
-            indices = np.where(aug_queries == query)
+            print(query)
+            indices = np.where(aug_queries == str(query))
+            print(indices)
             avg_reward = np.mean(aug_query_rewards[indices], axis=0)
             agg_query_rewards[query] = avg_reward
         return agg_query_rewards
@@ -347,17 +387,22 @@ class PreferencePairGenerator:
         rho = np.max(all_rewards, axis=1)
         # rho normalize
         rho = rho - np.mean(rho)
+
         winning_answers = np.argmax(all_rewards, axis=1)
         document_rewards = self.get_document_rewards(rho, winning_answers,top_documents,contributing_documents)
+        # print(document_rewards)
         aug_query_rewards = self.get_augment_query_rewards(all_documents, document_rewards, top_documents,rho,aug_queries)
-        agg_query_rewards = self.agg_query_rewards(aug_query_rewards, aug_queries)
 
-        unique_queries = len(agg_query_rewards.keys())
+        agg_query_rewards = self.agg_query_rewards(aug_query_rewards, aug_queries)
+        print(agg_query_rewards)
+
+        unique_queries = list(agg_query_rewards.keys())
         pairs = []
         for i in range(len(unique_queries)):
             for j in range(i + 1, len(unique_queries)):
-                query1, query2 = unique_queries[i], unique_queries[i]
-                reward1, reward2 = agg_query_rewards.get(query1), agg_query_rewards.get(query2)
+                query1, query2 = unique_queries[i], unique_queries[j]
+                reward1, reward2 = agg_query_rewards[query1], agg_query_rewards[query2]
+                # print(reward1,reward2)
                 if reward1 > reward2:
                     pairs.append((qa_prompt, query1, query2))
                 else:
