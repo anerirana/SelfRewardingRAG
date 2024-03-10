@@ -61,8 +61,11 @@ class RAGPipeline:
             queries = self.extract_query_samples(language_model, original_query, n=self.n)
 
             top_k_docs, all_docs = document_retrieval_model.forward(queries)
+            corpus = {}
+            for i,doc in enumerate(top_k_docs):
+                corpus[f"Extract {i}"] = doc
 
-            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = top_k_docs)
+            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = corpus)
             print(rag_prompt)
             # #TODO: Need to sample from the language model to get l answers
             responses = []
@@ -138,12 +141,14 @@ class RAGPipeline:
 
         print(response)
         queries = response.split("[/INST]")[-1].replace("</s>", "").replace("<pad>", "") #Remove the prompt from the response
-        
+        idx = queries.find("1.")
+        queries = queries[idx:]
+
         for i in range(1, n+1):
             queries = queries.replace(f"{i}.", "")
         
         queries = queries.strip().split("\n") #Split the response into a list of queries
-        queries = [q for q in queries if (q != "\r" or q != "\n")]
+        queries = [q for q in queries if (q != '\r' or q != '\n')]
         print(queries)
         #todo sanity check size of queries
         return queries

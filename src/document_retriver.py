@@ -10,23 +10,24 @@ class DocumentRetrievalModel:
     def forward(self, queries):
         # Logic to retrieve and return a list of documents based on the query
         # Placeholder implementation
-        path_to_index = "/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/index_1"
+        path_to_index = "/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/index_3"
         RAG = RAGPretrainedModel.from_index(path_to_index)
-        all_results = RAG.search(query=queries, k=5)
+        all_results = RAG.search(queries, k=5)
         top_k_documents = []
         all_documents = []
         all_ranks = []
-        for result in all_results:          
+        print(len(all_results))
+        for result in all_results:     
             row = []      
             for x in result:
-                row.append(x['document'])
+                row.append(x['content'])
                 all_ranks.append(x['rank'])               
             all_documents.append(row)
             
         top_k_documents.append(self.reciprocal_rank_fusion(all_documents, all_ranks))
         return top_k_documents, all_documents
     
-    def reciprocal_rank_fusion(self, all_documents, all_ranks, k=10):
+    def reciprocal_rank_fusion(self, all_documents, all_ranks, k=5):
         '''
         Apply RRF to multiple lists of items with their ranks, and return top-k
         documents based on thecombined scores.

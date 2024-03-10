@@ -24,14 +24,14 @@ def get_wikipedia_page(line):
     params = {
         "action": "query",
         "format": "json",
-        "titles": "samveg",
+        "titles": "fbdoc",
         "prop": "extracts",
         "explaintext": True,
     }
 
 
     response = requests.get(url,params=params,headers=headers)
-    print(response, "REASPONSE")
+    print(response, "RESPONSE")
     if response.status_code == 200:
         # Parse HTML content
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -43,6 +43,8 @@ def get_wikipedia_page(line):
         #     output_file.write(text)
 
         # # Return text or convert to JSON as per requirement
+        # print(text[:500])
+
         return text
     print(response.text[:500])
     data = response.json()
@@ -88,9 +90,9 @@ with open(file_path, 'w') as file:
     file.write(document_content)
     # for item in my_documents:
     #     file.write("%s\n" % item)
-index_path = RAG.index(index_name="/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/index_1", collection=document_content)
+index_path = RAG.index(index_name="/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/index_3", collection=[document_content])
 
 end_time = time.time()
 excution_time = end_time - start_time
 
-print(f"Execution time: {execution_time} seconds")
+print(f"Execution time: {excution_time} seconds")
