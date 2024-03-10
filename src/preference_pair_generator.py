@@ -13,37 +13,54 @@ class PreferencePairGenerator:
         '''
         self.rag_model = rag_model
     
-    def get_document_rewards(rho, winning_answers, top_documents, contributing_documents):
-        reward_docs = np.asarray([])
+    def get_document_rewards(self, rho, winning_answers, top_documents, contributing_documents):
+        reward_docs = None
+        print("RHO value is")
+        print(rho)  
+        # print()
         for i, top_docs in enumerate(top_documents):
             if rho[i] < 0:
-                reward_docs = np.vstack(reward_docs, np.full(len(top_docs), np.nan()))
+                new_rewards = np.full(len(top_docs), np.nan)
             else:
-                rewards = np.array([rho[i] if doc in contributing_documents[i][winning_answers[i]] else 0 for doc in top_docs])
-                reward_docs = np.vstack(reward_docs, rewards)
-
-        reward_docs = np.array(reward_docs)
+                new_rewards = np.array([rho[i] if doc in contributing_documents[i][winning_answers[i]] else 0 for doc in top_docs])
+            
+            if reward_docs is None:
+                reward_docs = new_rewards
+            else:
+                reward_docs = np.vstack([reward_docs, new_rewards])
+        # print("REWARDS")
+        # print(reward_docs)
+        # print(reward_docs.shape)
         return reward_docs     
     
-    def get_augment_query_rewards(all_documents, document_rewards, top_documents, rho, aug_queries):
+    def get_augment_query_rewards(self,all_documents, document_rewards, top_documents, rho, aug_queries):
+        # print(top_documents)
         rewards_aug_query = []
         
-        for i in range(aug_queries.shape[0]):
+
+        
+        for i in range(0,len(aug_queries)):
             if rho[i] < 0:
                 # Set the entire row to NaN if rho[i] is negative
-                rewards_aug_query.append([np.nan] * aug_queries.shape[1])
+                rewards_aug_query.append([np.nan] * len(aug_queries[1]))
             else:
                 z = []
-                for j in range(aug_queries.shape[1]):
+                for j in range(len(aug_queries[i])):
                     p = 0
                     for h, top_doc in enumerate(top_documents[i]):
-                        if top_doc in all_documents[i][j]:
+                        top_doc=repr(top_doc)
+                        # print(top_doc)
+                        # print(all_documents[i][j])
+                        if top_doc in all_documents[i][j] and len(top_doc)>0:
+                            print("HII")
+                            print()
                             index_in_all_docs = np.where(all_documents[i][j] == top_doc)
-                            p += document_rewards[i][h] / (index_in_all_docs + 1)
+                            print(index_in_all_docs)
+                            p += document_rewards[i][h] / (index_in_all_docs[0][0] + 1)
                     if p > 0:
-                      z.append(p)
+                        z.append(p)
                     else:
-                        z.append(np.nan)
+                        z.append(0)
                 rewards_aug_query.append(z)
         
         # Convert list of lists to a NumPy array
@@ -54,9 +71,13 @@ class PreferencePairGenerator:
     def agg_query_rewards(self, aug_query_rewards, aug_queries):
         unique_queries = np.unique(aug_queries)  
         agg_query_rewards = {}
+        print(aug_queries)
+        aug_queries=np.array(aug_queries)
 
         for query in unique_queries:
-            indices = np.where(aug_queries == query)
+            print(query)
+            indices = np.where(aug_queries == str(query))
+            print(indices)
             avg_reward = np.mean(aug_query_rewards[indices], axis=0)
             agg_query_rewards[query] = avg_reward
         return agg_query_rewards
@@ -79,17 +100,22 @@ class PreferencePairGenerator:
         rho = np.max(all_rewards, axis=1)
         # rho normalize
         rho = rho - np.mean(rho)
+
         winning_answers = np.argmax(all_rewards, axis=1)
         document_rewards = self.get_document_rewards(rho, winning_answers,top_documents,contributing_documents)
+        # print(document_rewards)
         aug_query_rewards = self.get_augment_query_rewards(all_documents, document_rewards, top_documents,rho,aug_queries)
-        agg_query_rewards = self.agg_query_rewards(aug_query_rewards, aug_queries)
 
-        unique_queries = len(agg_query_rewards.keys())
+        agg_query_rewards = self.agg_query_rewards(aug_query_rewards, aug_queries)
+        print(agg_query_rewards)
+
+        unique_queries = list(agg_query_rewards.keys())
         pairs = []
         for i in range(len(unique_queries)):
             for j in range(i + 1, len(unique_queries)):
-                query1, query2 = unique_queries[i], unique_queries[i]
-                reward1, reward2 = agg_query_rewards.get(query1), agg_query_rewards.get(query2)
+                query1, query2 = unique_queries[i], unique_queries[j]
+                reward1, reward2 = agg_query_rewards[query1], agg_query_rewards[query2]
+                # print(reward1,reward2)
                 if reward1 > reward2:
                     pairs.append((qa_prompt, query1, query2))
                 else:

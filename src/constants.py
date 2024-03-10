@@ -1,3 +1,5 @@
+import random
+
 QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {original_query}. 
 
 - Each version of the query should be distinct and relevant to the original query.
@@ -36,3 +38,11 @@ After examining the user's instruction and the response:
 “Score:<Points awarded> out of 5”
 
 Remember to assess from the AI Assistant perspective, utilizing web search knowledge as necessary. """
+
+DECODE_PARAMS_DICT = {
+            "temperature":random.choice([0.1,0.2,0.3,0.4]), 
+            "top_p":random.choice([0.99, 0.8, 0.7, 0.6, 0.5]), 
+            "repetition_penalty":random.choice([1.2, 1.3, 1.4, 1.5]), 
+            "min_new_tokens":random.choice([16, 32, 64, 128]), 
+            "max_new_tokens":random.choice([2016, 2032, 2064, 2128])
+          }

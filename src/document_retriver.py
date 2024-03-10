@@ -1,6 +1,7 @@
 from ragatouille import RAGPretrainedModel
 from ragatouille.utils import get_wikipedia_page
 from functools import partial
+from collections import defaultdict
    
 class DocumentRetrievalModel:
     def __init__(self):

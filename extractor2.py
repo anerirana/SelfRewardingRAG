@@ -91,8 +91,23 @@ with open(file_path, 'w') as file:
     # for item in my_documents:
     #     file.write("%s\n" % item)
 index_path = RAG.index(index_name="/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/index_3", collection=[document_content])
+# with open('./CA_links.txt', 'r') as file:
+#     for line in file:
+#         print(line)
+#         line = line.strip()  # Remove newline character
+#         document_content = get_wikipedia_page(line)
+#         if document_content:  # Add content to the list if it's not None
+#             my_documents.append(document_content)
+
+# # file_path = './outputs_final.txt'
+# # # Writing the array to a file
+# # with open(file_path, 'w') as file:
+# #     for item in my_documents:
+# #         file.write("%s\n" % item)
+# print("Number of indexed documents: ", len(my_documents))
+# index_path = RAG.index(index_name="./credit_agreement_database", collection=my_documents)
 
 end_time = time.time()
-excution_time = end_time - start_time
+execution_time = end_time - start_time
 
-print(f"Execution time: {excution_time} seconds")
+print(f"Execution time: {execution_time} seconds")
