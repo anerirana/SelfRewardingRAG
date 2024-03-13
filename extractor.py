@@ -78,17 +78,13 @@ def read_file_as_string(file_path):
 
 
 def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database"): 
-  file_names = [f.split('.')[0] for f in listdir(dir_path) if isfile(join(dir_path, f))]
+  file_names = [f.split('.')[0] for f in listdir(dir_path)]
   doc_collection = []
-  count = tqdm(total=len(file_names), desc='Iterations', position=0)
-  for i in range(len(file_names)):
+  for i in tqdm(range(len(file_names))):
       file_content = read_file_as_string(dir_path + file_names[i] + '.txt')
       doc_collection.append(file_content)
-      count.update(1)
 
-  # RAG = RAGPretrainedModel.from_index("/home/samvegvipuls_umass_edu/test_indexing_testing")
-  # RAG.add_to_index([file_content])
-  print("Number of read documents: ", len(doc_collection))
+  print("Number of read documents: ", len(file_names))
   RAG.index(index_name=index_path, collection=doc_collection, document_ids=file_names)
   print("Number of indexed documents: ", len(doc_collection))
 

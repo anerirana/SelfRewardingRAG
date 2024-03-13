@@ -48,3 +48,8 @@ Thumbs.db
 *.mov
 *.wmv
 
+*.xz
+*.tar
+
+credit_agreements_txt/
+testing.py
