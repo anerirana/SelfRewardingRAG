@@ -1,11 +1,12 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from transformers import T5Tokenizer, T5ForConditionalGeneration,AutoTokenizer,AutoModelForCausalLM
+from transformers import T5Tokenizer, T5ForConditionalGeneration,AutoTokenizer,AutoModelForCausalLM,TrainingArguments
 from document_retriver import DocumentRetrievalModel 
 from constants import *
 import re
-from tqdm import tqdm
+from trl import DPOTrainer
+from unsloth import FastLanguageModel
 
 
 # Utilities
@@ -21,8 +22,8 @@ class LLM(nn.Module):
         '''Retrival Augmented Generation model to generate responses for a given query 
         and a set of retieved documents
         '''
-        self.tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1")
-        self.model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.1",
+        self.tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2")
+        self.model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.2",
                     trust_remote_code=True,
                     device_map="auto")
                     
@@ -42,13 +43,23 @@ class LLM(nn.Module):
         inputs = encoded.to(self.model.device)
         # input_ids = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)    
         if param_dict is None:
-            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.2, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+            outputs = self.model.generate(inputs, temperature=0.7, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
         else:
-            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
+            #TODO: try fixing temperature=0.7
+            outputs = self.model.generate(inputs, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
 
         return self.tokenizer.decode(outputs[0])
 
     def train(self, training_dataset, batch_size=32, num_epochs=3):
+        dpo_trainer = DPOTrainer(
+            model,
+            model_ref=None,
+            args=training_args,
+            beta=0.1,
+            train_dataset=train_dataset,
+            tokenizer=tokenizer,
+        )
+        dpo_trainer.train()
         '''Train the RAGModel on the given training_dataset
 
         Parameters:
@@ -94,7 +105,7 @@ class RAGPipeline:
         aug_queries = []
         all_documents = []
         top_documents = []
-        all_responses = np.zeros((self.m, self.l), dtype=str)
+        all_responses = []
         all_rewards = np.zeros((self.m, self.l), dtype=float)
         contributing_documents = []
         first_pps = []
@@ -131,11 +142,11 @@ class RAGPipeline:
             aug_queries.append(queries)
             all_documents.append(all_docs)           
             top_documents.append(top_k_docs[0])
-            all_responses[i] = responses
+            all_responses.append(responses)
             all_rewards[i] = rewards
             contributing_documents.append(contri_docs)
             count.update(1)
-        
+        all_responses=np.array(all_responses)
         pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
 
         print("aug_queries: ")            
@@ -204,7 +215,7 @@ class RAGPipeline:
             answer_index = text.find("documents you used to answer the question.")
             # If "\nAnswer:" is found, extract the text after it
             if answer_index != -1:
-                text = text[answer_index + len('documents you used to answer the question.')+1]  # +8 to skip past the "\nAnswer:" part
+                text = text[answer_index + len('documents you used to answer the question.')+1:]  # +8 to skip past the "\nAnswer:" part
             else:
                 print("The string '\nAnswer:' was not found in the text.")
 
@@ -273,6 +284,7 @@ class RAGPipeline:
             queries = queries.replace(f"{i}.", "")
         
         queries = queries.strip().split("\n") #Split the response into a list of queries
+        queries=queries[2:]
 
         return queries
 
