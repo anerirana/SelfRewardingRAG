@@ -1,16 +1,24 @@
 import random
 
-QUERY_AUGMENTATION_PROMPT = "Give {n} different versions of the query: {original_query}"
+QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {original_query}. 
 
-RAG_PROMPT = "Answer the following question: {original_query} using information from the following documents: {documents}. Highlight which documents you used to answer the question."
+- Each version of the query should be distinct and relevant to the original query.
+- Itemize each query with a number and a period (e.g. "1. ").
+"""
 
-SAMPLING_PARAMS_DICT = {
-            "temperature":random.choice([0.1,0.2,0.3,0.4]), 
-            "top_p":random.choice([0.99, 0.8, 0.7, 0.6, 0.5]), 
-            "repetition_penalty":random.choice([1.2, 1.3, 1.4, 1.5]), 
-            "min_new_tokens":random.choice([16, 32, 64, 128]), 
-            "max_new_tokens":random.choice([2016, 2032, 2064, 2128])
-          }
+RAG_PROMPT = """You are a financial document expert. 
+
+Question : \"{original_query}\"
+
+Knowledge Base: {documents}. 
+
+#Rules to answer:
+- Provide a concise response to the user's question.
+- The response should be in bullet points. 
+- Last bullet point has to be "Extracts used: [extract numbers]"
+
+Remember, both the response and the extracts used are important.
+"""
 
 REWARD_PROMPT = """Review the user's question and the corresponding response using the 5-point scoring system described below. Points are accumulated based on the satisfaction of each criterion:
 
@@ -30,3 +38,22 @@ After examining the user's instruction and the response:
 “Score:<Points awarded> out of 5”
 
 Remember to assess from the AI Assistant perspective, utilizing web search knowledge as necessary. """
+
+SAMPLING_PARAMS_DICT = {
+            "temperature":random.choice([0.1,0.2,0.3,0.4]), 
+            "top_p":random.choice([0.99, 0.8, 0.7, 0.6, 0.5]), 
+            "repetition_penalty":random.choice([1.2, 1.3, 1.4, 1.5]), 
+            "min_new_tokens":random.choice([16, 32, 64, 128]), 
+            "max_new_tokens":random.choice([2016, 2032, 2064, 2128])
+          }
+
+EXTRACT_CITATION_PROMPT = """
+
+User Question: {original_query}
+
+Knowledge Base: {extracts}
+
+Answer Generated: {answer}
+
+List all the extracts from the knowledge base that were used in the answer.
+"""
