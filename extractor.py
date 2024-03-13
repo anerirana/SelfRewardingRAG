@@ -46,7 +46,6 @@ def get_html_page(line):
 
         # # Return text or convert to JSON as per requirement
         return text
-    print(response.text[:500])
     data = response.json()
 
     # Extracting page content
@@ -80,9 +79,7 @@ def read_file_as_string(file_path):
 
 def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database"): 
   file_names = [f.split('.')[0] for f in listdir(dir_path) if isfile(join(dir_path, f))]
-  # file_names = file_names[:5]
   doc_collection = []
-  # print(file_names[:5])
   count = tqdm(total=len(file_names), desc='Iterations', position=0)
   for i in range(len(file_names)):
       file_content = read_file_as_string(dir_path + file_names[i] + '.txt')
