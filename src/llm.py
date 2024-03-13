@@ -14,7 +14,7 @@ class LLM(nn.Module):
                     device_map="auto")                        
         self.model = torch.compile(self.model, mode = "max-autotune", backend="inductor")
     
-    def forward(self, prompt, temp=0.3, min_new_tokens=100):
+    def forward(self, prompt, temp=0.7, min_new_tokens=100):
         '''Generate response for the given prompt
 
         Parameters:

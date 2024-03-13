@@ -36,7 +36,7 @@ class RAGPipeline:
     
 
 
-    def train(self, original_query, doc_ids):
+    def train(self, original_query, doc_ids=None):
         '''Executes a training loop of the RAGPipeline
 
         Parameters:
@@ -48,7 +48,11 @@ class RAGPipeline:
         language_model = LLM(self.base_model)
         document_retrieval_model = DocumentRetrievalModel()   
         pp_generator = PreferencePairGenerator(language_model)
+        rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = extracts)
+        print(language_model.forward(EXTRACT_CITATION_PROMPT.format(original_query = original_query, extracts = extracts, answer = ideal_answer), min_new_tokens=10))
 
+        return
+    
         qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n, original_query=original_query)
 
         aug_queries = []

@@ -46,3 +46,14 @@ DECODE_PARAMS_DICT = {
             "min_new_tokens":random.choice([16, 32, 64, 128]), 
             "max_new_tokens":random.choice([2016, 2032, 2064, 2128])
           }
+
+EXTRACT_CITATION_PROMPT = """
+
+User Question: {original_query}
+
+Knowledge Base: {extracts}
+
+Answer Generated: {answer}
+
+List all the extracts from the knowledge base that were used in the answer.
+"""
