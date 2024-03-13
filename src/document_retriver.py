@@ -16,7 +16,6 @@ class DocumentRetrievalModel:
         top_k_documents = []
         all_documents = []
         all_ranks = []
-        print(len(all_results))
         for result in all_results:     
             row = []      
             for x in result:
