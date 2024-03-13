@@ -5,6 +5,7 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration,AutoTokenizer,A
 from document_retriver import DocumentRetrievalModel 
 from constants import *
 import re
+from tqdm import tqdm
 
 
 # Utilities
@@ -41,9 +42,9 @@ class LLM(nn.Module):
         inputs = encoded.to(self.model.device)
         # input_ids = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)    
         if param_dict is None:
-            outputs = self.model.generate(inputs, temperature=0.2, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.2, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
         else:
-            outputs = self.model.generate(inputs, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
+            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
 
         return self.tokenizer.decode(outputs[0])
 
@@ -67,13 +68,12 @@ class RAGPipeline:
         num_documents
             Numnber of docuemts to retrieve per query by the Document Retrieval Model 
         '''
-        self.num_documents = default(config.get('NumberOfRetrievedDocuments'), 5)
+        self.p = default(config.get('NumberOfRetrievedDocuments'), 5)
         self.m = default(config.get('NumberOfQuerySets'), 5)
         self.n = default(config.get('NumberOfAugementedQueries'), 5)
         self.l = default(config.get('NumberOfResponses'), 5)
-        self.base_model = default(config.get('BaseModel'), 'google/flan-t5-xxl')
-        
-    
+        self.k = default(config.get('NumberOfTopkDocuments'), 5)
+        self.base_model = default(config.get('BaseModel'), 'google/flan-t5-xxl') 
 
 
     def train(self, original_query, doc_ids):
@@ -98,25 +98,20 @@ class RAGPipeline:
         all_rewards = np.zeros((self.m, self.l), dtype=float)
         contributing_documents = []
         first_pps = []
-        print("Value of m is")
-        print(self.m)
+        count = tqdm(total=self.m, desc='Iterations', position=0)
 
         for i in range(self.m):
-            print("the iteration number is ",i)
             queries = self.extract_query_samples(language_model, qa_prompt)
-            print("queries augmented")
 
-            top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids)
+            top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
 
             rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = top_k_docs)
 
             #TODO: Need to sample from the language model to get l answers
             responses = self.get_query_responses(language_model, rag_prompt)
-            print(responses)
-            print("responses got")
-            print("dimension of top k")
-            print(self.find_list_dimensions(top_k_docs))
+            
 
+            # TODO: check this dimension
             contri_docs = top_k_docs*self.l
             # responses, contri_docs = self.parser_responses(responses,i)                
                  
@@ -129,10 +124,7 @@ class RAGPipeline:
             # break
 
             pp1 = pp_generator.generateFirstPP(rag_prompt, responses, rewards)
-            print("Got the pp")
-            # print("PPP")
-            # print(pp1)
-            # break
+            
 
 
             first_pps.append(pp1)
@@ -142,9 +134,11 @@ class RAGPipeline:
             all_responses[i] = responses
             all_rewards[i] = rewards
             contributing_documents.append(contri_docs)
+            count.update(1)
         
-        print("aug_queries: ")
-            
+        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
+
+        print("aug_queries: ")            
         print(str(self.find_list_dimensions(aug_queries)))
         print(">>"*100)
         print("all_documents: ")
@@ -164,12 +158,10 @@ class RAGPipeline:
         print(">>"*100)
         print("first_pps: ")
         print(str(self.find_list_dimensions(first_pps)))
+        print(">>"*100)
+        print("second_pps: ")
+        print(len(pp2))
 
-        
-        
-
-        
-        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
         with open("./output.txt","w") as f:
             f.write("aug_queries: ")
 
@@ -197,8 +189,7 @@ class RAGPipeline:
             f.write(str(pp2))
             f.write(">>"*100)
 
-        #TODO: load pp1 and pp2 in a dataset loader for training
-        
+        #TODO: load pp1 and pp2 in a dataset loader for training        
         language_model.train()
     
     def find_list_dimensions(self,lst):
@@ -209,16 +200,13 @@ class RAGPipeline:
     def get_query_responses(self, language_model, rag_prompt):
         responses = []
         for i in range(self.l):
-            text=language_model(rag_prompt, DECODE_PARAMS_DICT)
-            print("The type is")
-            print(text)
-            print(type(text))
+            text=language_model(rag_prompt, SAMPLING_PARAMS_DICT)
             answer_index = text.find("documents you used to answer the question.")
             # If "\nAnswer:" is found, extract the text after it
             if answer_index != -1:
                 text = text[answer_index + len('documents you used to answer the question.')+1]  # +8 to skip past the "\nAnswer:" part
-            # else:
-            #     return "The string '\nAnswer:' was not found in the text."
+            else:
+                print("The string '\nAnswer:' was not found in the text.")
 
             # r = r.split(rag_prompt)[-1] #Remove the prompt from the response
             # r = r.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
@@ -271,7 +259,7 @@ class RAGPipeline:
 
         while j < max_tries and sanity_check == False:
             j += 1
-            response = language_model(qa_prompt, DECODE_PARAMS_DICT)
+            response = language_model(qa_prompt, SAMPLING_PARAMS_DICT)
             sanity_check = True
             for i in range(1, self.n+1):
                 if f"{i}." not in response:
@@ -302,9 +290,6 @@ class PreferencePairGenerator:
     
     def get_document_rewards(self, rho, winning_answers, top_documents, contributing_documents):
         reward_docs = None
-        print("RHO value is")
-        print(rho)  
-        # print()
         for i, top_docs in enumerate(top_documents):
             if rho[i] < 0:
                 new_rewards = np.full(len(top_docs), np.nan)
@@ -315,17 +300,10 @@ class PreferencePairGenerator:
                 reward_docs = new_rewards
             else:
                 reward_docs = np.vstack([reward_docs, new_rewards])
-        # print("REWARDS")
-        # print(reward_docs)
-        # print(reward_docs.shape)
         return reward_docs     
     
     def get_augment_query_rewards(self,all_documents, document_rewards, top_documents, rho, aug_queries):
-        # print(top_documents)
         rewards_aug_query = []
-        
-
-        
         for i in range(0,len(aug_queries)):
             if rho[i] < 0:
                 # Set the entire row to NaN if rho[i] is negative
@@ -336,18 +314,13 @@ class PreferencePairGenerator:
                     p = 0
                     for h, top_doc in enumerate(top_documents[i]):
                         top_doc=repr(top_doc)
-                        # print(top_doc)
-                        # print(all_documents[i][j])
                         if top_doc in all_documents[i][j] and len(top_doc)>0:
-                            print("HII")
-                            print()
                             index_in_all_docs = np.where(all_documents[i][j] == top_doc)
-                            print(index_in_all_docs)
                             p += document_rewards[i][h] / (index_in_all_docs[0][0] + 1)
                     if p > 0:
                         z.append(p)
                     else:
-                        z.append(0)
+                        z.append(np.nan)
                 rewards_aug_query.append(z)
         
         # Convert list of lists to a NumPy array
@@ -358,13 +331,10 @@ class PreferencePairGenerator:
     def agg_query_rewards(self, aug_query_rewards, aug_queries):
         unique_queries = np.unique(aug_queries)  
         agg_query_rewards = {}
-        print(aug_queries)
         aug_queries=np.array(aug_queries)
 
         for query in unique_queries:
-            print(query)
             indices = np.where(aug_queries == str(query))
-            print(indices)
             avg_reward = np.mean(aug_query_rewards[indices], axis=0)
             agg_query_rewards[query] = avg_reward
         return agg_query_rewards
@@ -390,11 +360,11 @@ class PreferencePairGenerator:
 
         winning_answers = np.argmax(all_rewards, axis=1)
         document_rewards = self.get_document_rewards(rho, winning_answers,top_documents,contributing_documents)
-        # print(document_rewards)
+        
         aug_query_rewards = self.get_augment_query_rewards(all_documents, document_rewards, top_documents,rho,aug_queries)
 
         agg_query_rewards = self.agg_query_rewards(aug_query_rewards, aug_queries)
-        print(agg_query_rewards)
+        
 
         unique_queries = list(agg_query_rewards.keys())
         pairs = []
@@ -402,7 +372,6 @@ class PreferencePairGenerator:
             for j in range(i + 1, len(unique_queries)):
                 query1, query2 = unique_queries[i], unique_queries[j]
                 reward1, reward2 = agg_query_rewards[query1], agg_query_rewards[query2]
-                # print(reward1,reward2)
                 if reward1 > reward2:
                     pairs.append((qa_prompt, query1, query2))
                 else:

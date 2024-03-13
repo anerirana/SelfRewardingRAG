@@ -4,10 +4,29 @@ QUERY_AUGMENTATION_PROMPT = "Give {n} different versions of the query: {original
 
 RAG_PROMPT = "Answer the following question: {original_query} using information from the following documents: {documents}. Highlight which documents you used to answer the question."
 
-DECODE_PARAMS_DICT = {
+SAMPLING_PARAMS_DICT = {
             "temperature":random.choice([0.1,0.2,0.3,0.4]), 
             "top_p":random.choice([0.99, 0.8, 0.7, 0.6, 0.5]), 
             "repetition_penalty":random.choice([1.2, 1.3, 1.4, 1.5]), 
             "min_new_tokens":random.choice([16, 32, 64, 128]), 
             "max_new_tokens":random.choice([2016, 2032, 2064, 2128])
           }
+
+REWARD_PROMPT = """Review the user's question and the corresponding response using the 5-point scoring system described below. Points are accumulated based on the satisfaction of each criterion:
+
+- Award 1 point if the response is relevant and provides some information related to the user's inquiry, even if it is incomplete or contains some irrelevant content.
+- Award 2 points if the response addresses a substantial portion of the user's question but does not completely resolve the query or provide a direct answer.
+- Award 3 points if the response answers the basic elements of the user's question in a useful way, regardless of whether it seems to have been written by an AI Assistant or if it has elements typically found in blogs or search results.
+- Award 4 points if the response is clearly written from an AI Assistant's perspective, addressing the user's question directly and comprehensively, and is well-organizedand helpful,even if there is slight room for improvement in clarity, conciseness or focus.
+- Award 5 points for a response that is impeccably tailored to the user's question by an AI Assistant, without extraneous information, reflecting expert knowledge, and demonstrating a high-quality, engaging, and insightful answer.
+
+User: {original_query} 
+Response: {answer}
+
+After examining the user's instruction and the response:
+
+-Briefly justify your total score.
+-Conclude with the score using the format: 
+“Score:<Points awarded> out of 5”
+
+Remember to assess from the AI Assistant perspective, utilizing web search knowledge as necessary. """

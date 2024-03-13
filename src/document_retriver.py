@@ -4,16 +4,15 @@ from functools import partial
 from collections import defaultdict
    
 class DocumentRetrievalModel:
-    def __init__(self):
+    def __init__(self, path_to_index = "../.ragatouille/colbert/indexes/credit_agreement_database"):
         # Initialize components specific to Document Retrieval
-        pass
+        self.path_to_index = path_to_index
+        self.RAG = RAGPretrainedModel.from_index(path_to_index)
         
-    def forward(self, queries):
+    def forward(self, queries, doc_ids, p, k):
         # Logic to retrieve and return a list of documents based on the query
         # Placeholder implementation
-        path_to_index = "../.ragatouille/colbert/indexes/credit_agreement_database"
-        RAG = RAGPretrainedModel.from_index(path_to_index)
-        all_results = RAG.search(query=queries, k=5)
+        all_results = self.RAG.search(query=queries, k=p, doc_ids=doc_ids)
         top_k_documents = []
         all_documents = []
         all_ranks = []
@@ -24,10 +23,10 @@ class DocumentRetrievalModel:
                 all_ranks.append(x['rank'])               
             all_documents.append(row)
             
-        top_k_documents.append(self.reciprocal_rank_fusion(all_documents, all_ranks))
+        top_k_documents.append(self.reciprocal_rank_fusion(all_documents, all_ranks, k))
         return top_k_documents, all_documents
     
-    def reciprocal_rank_fusion(self, all_documents, all_ranks, k=10):
+    def reciprocal_rank_fusion(self, all_documents, all_ranks, k):
         '''
         Apply RRF to multiple lists of items with their ranks, and return top-k
         documents based on thecombined scores.
