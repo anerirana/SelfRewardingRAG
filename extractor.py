@@ -78,10 +78,8 @@ def read_file_as_string(file_path):
 
 
 def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database"): 
-  file_names = [f.split('.')[0] for f in listdir(dir_path)][:1000]
-#   file_names = file_names[:10]
+  file_names = [f.split('.')[0] for f in listdir(dir_path)]
   doc_collection = []
-#   print(file_names[:5])
   for i in tqdm(range(len(file_names))):
       file_content = read_file_as_string(dir_path + file_names[i] + '.txt')
       doc_collection.append(file_content)
@@ -92,10 +90,10 @@ def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database"):
 
 
 if __name__ == "__main__":
-    dir_path = '/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/SelfRewardingRAG/credit_agreements_txt/'
+    dir_path = '/scratch/workspace/arana_umass_edu-goldamn_project/data/new_txt_extracts/'
     RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
     start_time = time.time()
-    fetch_docs_from_text(dir_path, index_path="/work/pi_dhruveshpate_umass_edu/aneelakantes_umass_edu/new_index4")
+    fetch_docs_from_text(dir_path, index_path="/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_2854")
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time} seconds")
