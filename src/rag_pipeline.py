@@ -1,9 +1,10 @@
+
 import numpy as np
 
 from llm import LLM
 from document_retriver import DocumentRetrievalModel 
 from constants import *
-from testing_rewards import *
+# from testing_rewards import *
 from preference_pair_generator import PreferencePairGenerator
 from document_retriver import DocumentRetrievalModel 
 from constants import *
@@ -151,8 +152,33 @@ class RAGPipeline:
             f.write(str(pp2))
             f.write(">>"*100)
 
-        #TODO: load pp1 and pp2 in a dataset loader for training        
-        language_model.train()
+        #TODO: load pp1 and pp2 in a dataset loader for training     
+        
+        dpo_dataset_dict=self.dpo_parsing(first_pps,pp2)
+        language_model.train(dpo_dataset_dict)
+
+    def dpo_parsing(self,first_pps,pp2):
+        dpo_dataset_dict={"prompt": [],"chosen": [], "rejected": []}
+        for i in range(0,len(first_pps)):
+            dpo_dataset_dict["prompt"].append(first_pps[i][0])
+            dpo_dataset_dict["chosen"].append(first_pps[i][1])
+            dpo_dataset_dict["rejected"].append(first_pps[i][2])
+        
+        for i in range(0,len(pp2)):
+            dpo_dataset_dict["prompt"].append(pp2[i][0])
+            dpo_dataset_dict["chosen"].append(pp2[i][1])
+            dpo_dataset_dict["rejected"].append(pp2[i][2])
+        
+        return(dpo_dataset_dict)
+
+
+
+
+
+
+
+
+
     
     def find_list_dimensions(self,lst):
         if not isinstance(lst, list) or not lst:  # Base case: not a list or empty list
@@ -163,10 +189,10 @@ class RAGPipeline:
         responses = []
         for i in range(self.l):
             text=language_model(rag_prompt, SAMPLING_PARAMS_DICT)
-            answer_index = text.find("documents you used to answer the question.")
+            answer_index = text.find("[/INST]")
             # If "\nAnswer:" is found, extract the text after it
             if answer_index != -1:
-                text = text[answer_index + len('documents you used to answer the question.')+1:]  # +8 to skip past the "\nAnswer:" part
+                text = text[answer_index+3:]  # +8 to skip past the "\nAnswer:" part
             else:
                 print("The string '\nAnswer:' was not found in the text.")
 
