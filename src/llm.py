@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer,AutoModelForCausalLM
-from trl import DPOTrainer
-from unsloth import FastLanguageModel
+# from trl import DPOTrainer
+# from unsloth import FastLanguageModel
 
 class LLM(nn.Module):
     def __init__(self, model_name):
@@ -30,28 +30,29 @@ class LLM(nn.Module):
         inputs = encoded.to(self.model.device)     
         
         if param_dict is None:
-            outputs = self.model.generate(inputs, temperature=0.7, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
         else:
             #TODO: try fixing temperature=0.7
-            outputs = self.model.generate(inputs, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
+            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
         
         return self.tokenizer.decode(outputs[0])
 
     def train(self, training_dataset, batch_size=32, num_epochs=3):
-        dpo_trainer = DPOTrainer(
-            model,
-            model_ref=None,
-            args=training_args,
-            beta=0.1,
-            train_dataset=train_dataset,
-            tokenizer=tokenizer,
-        )
-        dpo_trainer.train()
         '''Train the RAGModel on the given training_dataset
         Parameters:
         -----------
         training_dataset
             Contains the training data for query augemntation or reward generation or answer generator
         '''
+
+        # dpo_trainer = DPOTrainer(
+        #     model,
+        #     model_ref=None,
+        #     args=training_args,
+        #     beta=0.1,
+        #     train_dataset=train_dataset,
+        #     tokenizer=tokenizer,
+        # )
+        # dpo_trainer.train()
 
         pass

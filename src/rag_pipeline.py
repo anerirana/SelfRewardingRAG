@@ -9,8 +9,6 @@ from preference_pair_generator import PreferencePairGenerator
 from document_retriver import DocumentRetrievalModel 
 from constants import *
 import re
-from trl import DPOTrainer
-from unsloth import FastLanguageModel
 from tqdm import tqdm
 
 
@@ -99,7 +97,6 @@ class RAGPipeline:
             contributing_documents.append(contri_docs)
             count.update(1)
         all_responses=np.array(all_responses)
-        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
 
         print("aug_queries: ")            
         print(str(self.find_list_dimensions(aug_queries)))
@@ -122,6 +119,8 @@ class RAGPipeline:
         print("first_pps: ")
         print(str(self.find_list_dimensions(first_pps)))
         print(">>"*100)
+        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
+
         print("second_pps: ")
         print(len(pp2))
 
@@ -170,15 +169,6 @@ class RAGPipeline:
             dpo_dataset_dict["rejected"].append(pp2[i][2])
         
         return(dpo_dataset_dict)
-
-
-
-
-
-
-
-
-
     
     def find_list_dimensions(self,lst):
         if not isinstance(lst, list) or not lst:  # Base case: not a list or empty list
@@ -194,7 +184,7 @@ class RAGPipeline:
             if answer_index != -1:
                 text = text[answer_index+3:]  # +8 to skip past the "\nAnswer:" part
             else:
-                print("The string '\nAnswer:' was not found in the text.")
+                print("The string '\nAnswer:' was not found in the text.\n", text)
 
             # r = r.split(rag_prompt)[-1] #Remove the prompt from the response
             # r = r.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
@@ -263,6 +253,6 @@ class RAGPipeline:
         queries = queries.strip().split("\n") #Split the response into a list of queries
         queries = queries[2:]
         # queries = [q for q in queries if (q != '\r' or q != '\n')]
-        # print(queries)
+        print("len(queries): ", len(queries))
         #todo sanity check size of queries
         return queries
