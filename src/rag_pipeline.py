@@ -4,7 +4,6 @@ import numpy as np
 from llm import LLM
 from document_retriver import DocumentRetrievalModel 
 from constants import *
-# from testing_rewards import *
 from preference_pair_generator import PreferencePairGenerator
 from document_retriver import DocumentRetrievalModel 
 from constants import *
