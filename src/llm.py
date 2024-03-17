@@ -7,7 +7,7 @@ from unsloth import FastLanguageModel
 from trl import SFTTrainer
 from transformers import TrainingArguments
 from datasets import load_dataset
-from unsloth import PatchDPOTrainer
+from unsloth import PatchDPOTrainer,unsloth_save_model
 
 from datasets import Dataset
 class LLM(nn.Module):
@@ -137,3 +137,5 @@ class LLM(nn.Module):
         )
         print("HELOOOOOOOO")
         dpo_trainer.train()
+        unsloth_save_model(model, tokenizer, "output_model", push_to_hub=False, token=None)
+
