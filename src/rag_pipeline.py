@@ -3,13 +3,13 @@ import numpy as np
 from llm import LLM
 from document_retriver import DocumentRetrievalModel 
 from constants import *
-from testing_rewards import *
+from testing import *
 from preference_pair_generator import PreferencePairGenerator
 from document_retriver import DocumentRetrievalModel 
 from constants import *
 import re
 from trl import DPOTrainer
-from unsloth import FastLanguageModel
+# from unsloth import FastLanguageModel
 from tqdm import tqdm
 
 
@@ -35,7 +35,7 @@ class RAGPipeline:
         self.n = default(config.get('NumberOfAugementedQueries'), 5)
         self.l = default(config.get('NumberOfResponses'), 5)
         self.k = default(config.get('NumberOfTopkDocuments'), 5)
-        self.base_model = default(config.get('BaseModel'), 'google/flan-t5-xxl') 
+        self.base_model = default(config.get('BaseModel'), 'mistralai/Mistral-7B-Instruct-v0.2') 
 
 
     def train(self, original_query, doc_ids=None):
@@ -48,7 +48,7 @@ class RAGPipeline:
         '''
         # Create instances of required models
         language_model = LLM(self.base_model)
-        document_retrieval_model = DocumentRetrievalModel()   
+        document_retrieval_model = None #DocumentRetrievalModel()   
         pp_generator = PreferencePairGenerator(language_model)
     
         qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n, original_query=original_query)
@@ -63,18 +63,24 @@ class RAGPipeline:
         count = tqdm(total=self.m, desc='Iterations', position=0)
 
         for i in range(self.m):
-            queries = self.extract_query_samples(language_model, qa_prompt)
+            # queries = self.extract_query_samples(language_model, qa_prompt)
 
-            top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
+            # top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
 
-            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = top_k_docs)
+            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = extracts)
 
             #TODO: Need to sample from the language model to get l answers
-            responses = self.get_query_responses(language_model, rag_prompt)
+            # responses = self.get_query_responses(language_model, rag_prompt)
             
+            r2 = language_model.forward(REWARD_PROMPT.format(original_query=original_query, answer = "Credit agreements don't have numerical limits."))
+            print(r2)
+
+            r3 = language_model.forward(EXTRACT_CITATION_PROMPT.format(original_query=original_query, documents=extracts, answer = ideal_answer))
+            print(r3.split("[/INST]")[-1])
+            return
 
             # TODO: check this dimension
-            contri_docs = top_k_docs*self.l
+            contri_docs = extracts*self.l
             # responses, contri_docs = self.parser_responses(responses,i)                
                  
             rewards = [self.get_rewards(language_model, original_query, response) for response in responses]
@@ -91,8 +97,8 @@ class RAGPipeline:
 
             first_pps.append(pp1)
             aug_queries.append(queries)
-            all_documents.append(all_docs)           
-            top_documents.append(top_k_docs[0])
+            all_documents.append(extracts)           
+            top_documents.append(extracts[0])
             all_responses.append(responses)
             all_rewards[i] = rewards
             contributing_documents.append(contri_docs)
@@ -162,21 +168,22 @@ class RAGPipeline:
     def get_query_responses(self, language_model, rag_prompt):
         responses = []
         for i in range(self.l):
-            text=language_model(rag_prompt, SAMPLING_PARAMS_DICT)
-            answer_index = text.find("documents you used to answer the question.")
-            # If "\nAnswer:" is found, extract the text after it
-            if answer_index != -1:
-                text = text[answer_index + len('documents you used to answer the question.')+1:]  # +8 to skip past the "\nAnswer:" part
-            else:
-                print("The string '\nAnswer:' was not found in the text.")
+            text=language_model.forward(rag_prompt).split("[/INST]")[-1]
+            print(text)
+            # answer_index = text.find("documents you used to answer the question.")
+            # # If "\nAnswer:" is found, extract the text after it
+            # if answer_index != -1:
+            #     text = text[answer_index + len('documents you used to answer the question.')+1:]  # +8 to skip past the "\nAnswer:" part
+            # else:
+            #     print("The string '\nAnswer:' was not found in the text.")
 
             # r = r.split(rag_prompt)[-1] #Remove the prompt from the response
             # r = r.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
 
-            responses.append(text)
+            # responses.append(text)
        
     
-        return responses    
+        return text    
 
     # TODO
     def parser_responses(self, responses, index):
@@ -228,14 +235,15 @@ class RAGPipeline:
                     sanity_check = False
                     break
         
-        queries = response.split(qa_prompt)[-1] #Remove the prompt from the response
+        queries = response.split("[/INST]")[-1] #Remove the prompt from the response
         queries = queries.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
         
         for i in range(1, self.n+1):
             queries = queries.replace(f"{i}.", "")
         
         queries = queries.strip().split("\n") #Split the response into a list of queries
-        queries = queries[2:]
+        print(queries)
+        # queries = queries[2:]
         # queries = [q for q in queries if (q != '\r' or q != '\n')]
         # print(queries)
         #todo sanity check size of queries
