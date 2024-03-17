@@ -49,7 +49,7 @@ class RAGPipeline:
         document_retrieval_model = DocumentRetrievalModel()   
         pp_generator = PreferencePairGenerator(language_model)
     
-        qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n, original_query=original_query)
+        qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
 
         aug_queries = []
         all_documents = []
@@ -61,7 +61,7 @@ class RAGPipeline:
         count = tqdm(total=self.m, desc='Iterations', position=0)
 
         for i in range(self.m):
-            queries = self.extract_query_samples(language_model, qa_prompt)
+            queries = self.extract_query_samples(language_model, qa_prompt, original_query)
 
             top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
 
@@ -76,12 +76,11 @@ class RAGPipeline:
             # responses, contri_docs = self.parser_responses(responses,i)                
                  
             rewards = [self.get_rewards(language_model, original_query, response) for response in responses]
-            with open("./output2.txt","w") as f:
+            with open("output/output.txt","w") as f:
                 f.write("responses: ")
                 f.write(str(responses))
                 f.write("rewards: ")
                 f.write(str(rewards))
-            # break
 
             pp1 = pp_generator.generateFirstPP(rag_prompt, responses, rewards)
             
@@ -122,8 +121,9 @@ class RAGPipeline:
 
         print("second_pps: ")
         print(len(pp2))
+        dpo_dataset_dict=self.dpo_parsing(first_pps,pp2)
 
-        with open("./output.txt","w") as f:
+        with open("output/all_variables.txt","w") as f:
             f.write("aug_queries: ")
 
             f.write(str(aug_queries))
@@ -149,10 +149,13 @@ class RAGPipeline:
             f.write("second pp")
             f.write(str(pp2))
             f.write(">>"*100)
+            f.write("DPO dataset")
+            f.write(str(dpo_dataset_dict))
+            f.write(">>"*100)
 
         #TODO: load pp1 and pp2 in a dataset loader for training     
         
-        dpo_dataset_dict=self.dpo_parsing(first_pps,pp2)
+        
         language_model.train(dpo_dataset_dict)
 
     def dpo_parsing(self,first_pps,pp2):
@@ -215,16 +218,16 @@ class RAGPipeline:
                 reward = match.group(1)  
                 do_retry = False
         
-            if do_retry:
-                with open("./error.txt","a") as f:
-                    f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
+        if do_retry:
+            with open("output/reward_error.txt","a") as f:
+                f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
 
 
                 # raise Exception("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
         
         return reward
     
-    def extract_query_samples(self, language_model, qa_prompt):
+    def extract_query_samples(self, language_model, qa_prompt, original_query):
         '''
         Extracts query samples from the language model
         '''
@@ -243,15 +246,22 @@ class RAGPipeline:
                     sanity_check = False
                     break
         
-        queries = response.split(qa_prompt)[-1] #Remove the prompt from the response
-        queries = queries.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
+        queries = response.split(qa_prompt)[-1] #Remove the prompt from the response       
+        queries = re.sub(r'<s>|</s>|<pad>|[\[|\"|\'|\/]+INST\]', '', queries) #Remove special tokens
         
         for i in range(1, self.n+1):
-            queries = queries.replace(f"{i}.", "")
+            queries = re.sub(f"Version {i}.", "", queries)
+            queries = re.sub(f"{i}.", "", queries)
         
-        queries = queries.strip().split("\n") #Split the response into a list of queries
-        queries = queries[2:]
-        # queries = [q for q in queries if (q != '\r' or q != '\n')]
-        print("len(queries): ", len(queries))
-        #todo sanity check size of queries
+        queries = queries.strip()
+        queries = re.split(r"\n{1,2}", queries) #Split the response into a list of queries
+        
+        queries = [q.strip() for q in queries]
+        queries = [q for q in queries if q != '']
+        queries.append(original_query)
+        
+        if len(queries) < self.n:
+            queries.extend(random.choice(queries, k=self.n-queries))
+        else:
+            queries = queries[:self.n]
         return queries
