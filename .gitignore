@@ -53,3 +53,5 @@ Thumbs.db
 
 credit_agreements_txt/
 testing.py
+
+*.txt
