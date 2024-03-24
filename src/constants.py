@@ -40,7 +40,7 @@ After examining the user's instruction and the response:
 Remember to assess from the AI Assistant perspective, utilizing web search knowledge as necessary. """
 
 SAMPLING_PARAMS_DICT = {
-            "temperature":random.choice([0.1,0.2,0.3,0.4]), 
+            "temperature":0.7, 
             "top_p":random.choice([0.99, 0.8, 0.7, 0.6, 0.5]), 
             "repetition_penalty":random.choice([1.2, 1.3, 1.4, 1.5]), 
             "min_new_tokens":random.choice([16, 32, 64, 128]), 
