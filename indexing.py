@@ -69,6 +69,7 @@ def fetch_docs_from_html(links_file_path='./CA_links.txt', index_path="./credit_
     #     for item in my_documents:
     #         file.write("%s\n" % item)
     print("Number of indexed documents: ", len(my_documents))
+    RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
     index_path = RAG.index(index_name=index_path, collection=my_documents)
 
 def read_file_as_string(file_path):
@@ -77,24 +78,33 @@ def read_file_as_string(file_path):
     return file_content
 
 
-def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database"): 
+def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database", new_index=True, doc_ids=None): 
   file_names = [f.split('.')[0] for f in listdir(dir_path)]
-  file_names = file_names[:1]
+  
+  if doc_ids:
+    new_file_names = [file for file in file_names if file in doc_ids]
+  file_names.extend(new_file_names)
+
   doc_collection = []
   for i in tqdm(range(len(file_names))):
       file_content = read_file_as_string(dir_path + file_names[i] + '.txt')
       doc_collection.append(file_content)
 
   print("Number of read documents: ", len(file_names))
-  RAG.index(index_name=index_path, collection=doc_collection, document_ids=file_names)
+  if new_index:
+      RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
+      RAG.index(index_name=index_path, collection=doc_collection, document_ids=file_names)
+  else:
+      RAG = RAGPretrainedModel.from_index(index_path)
+      RAG.add_to_index(index_name=index_path, new_collection=doc_collection, new_document_ids=file_names)
   print("Number of indexed documents: ", len(doc_collection))
 
 
 if __name__ == "__main__":
-    dir_path = '/scratch/workspace/arana_umass_edu-goldamn_project/data/new_txt_extracts/'
-    RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
+    dir_path = '/scratch/workspace/arana_umass_edu-goldamn_project/data/new_txt_extracts/' 
     start_time = time.time()
-    fetch_docs_from_text(dir_path, index_path="/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_val_and_test")
+    fetch_docs_from_text(dir_path, 
+    index_path="/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_val_and_test")
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Execution time: {execution_time} seconds")
