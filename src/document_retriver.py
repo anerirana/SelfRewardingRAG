@@ -12,11 +12,11 @@ class DocumentRetrievalModel:
     def forward(self, queries, doc_ids, p, k):
         # Logic to retrieve and return a list of documents based on the query
         # Placeholder implementation
-        all_results = self.RAG.search(query=queries, k=p, doc_ids=doc_ids)
         top_k_documents = []
         all_documents = []
         all_ranks = []
-        for result in all_results:     
+        for query in queries:   
+            result = self.RAG.search(query=query, k=p, doc_ids=doc_ids)
             row = []      
             for x in result:
                 row.append(x['content'])
