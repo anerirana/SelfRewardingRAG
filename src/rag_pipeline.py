@@ -187,8 +187,12 @@ class RAGPipeline:
         responses = []
         for i in range(self.l):
             llm_answer=language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
+            try:
+                answer, sources = re.split("sources?\s?used", llm_answer, flags=re.IGNORECASE)
+            except ValueError as e:
+                print("Response not in right format")
+                #TODO: Fall back to sentence similarity using llm_answer
 
-            answer, sources = re.split("sources?\s?used", llm_answer, flags=re.IGNORECASE)
             # If "\nAnswer:" is found, extract the text after it
             # if answer_index != -1:
             #     text = text[answer_index+3:]  # +8 to skip past the "\nAnswer:" part
@@ -197,10 +201,13 @@ class RAGPipeline:
 
             # r = r.split(rag_prompt)[-1] #Remove the prompt from the response
             # r = r.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
+                
+            source_list = re.findall("source.*\d+", sources, flags=re.I)
 
             responses.append(answer)
             print(sources)
-            
+            print(source_list)
+
         return responses    
 
     # TODO
