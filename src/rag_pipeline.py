@@ -65,7 +65,13 @@ class RAGPipeline:
 
             top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
 
-            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = top_k_docs)
+            knowledge_base = []
+            ctr = 0
+            for doc in top_k_docs:
+                knowledge_base.append(f"Source {ctr+1}: {doc}")
+                ctr+=1
+            rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+            
 
             #TODO: Need to sample from the language model to get l answers
             responses = self.get_query_responses(language_model, rag_prompt)
@@ -180,20 +186,21 @@ class RAGPipeline:
     def get_query_responses(self, language_model, rag_prompt):
         responses = []
         for i in range(self.l):
-            text=language_model(rag_prompt, SAMPLING_PARAMS_DICT)
-            answer_index = text.find("[/INST]")
+            llm_answer=language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
+
+            answer, sources = re.split("sources?\s?used", llm_answer, flags=re.IGNORECASE)
             # If "\nAnswer:" is found, extract the text after it
-            if answer_index != -1:
-                text = text[answer_index+3:]  # +8 to skip past the "\nAnswer:" part
-            else:
-                print("The string '\nAnswer:' was not found in the text.\n", text)
+            # if answer_index != -1:
+            #     text = text[answer_index+3:]  # +8 to skip past the "\nAnswer:" part
+            # else:
+            #     print("The string '\nAnswer:' was not found in the text.\n", text)
 
             # r = r.split(rag_prompt)[-1] #Remove the prompt from the response
             # r = r.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
 
-            responses.append(text)
-       
-    
+            responses.append(answer)
+            print(sources)
+            
         return responses    
 
     # TODO

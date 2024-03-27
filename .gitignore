@@ -50,8 +50,10 @@ Thumbs.db
 
 *.xz
 *.tar
+*.txt
 
 credit_agreements_txt/
+credit_agreements_val/
 testing.py
 data/
 output/
