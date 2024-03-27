@@ -6,15 +6,17 @@ QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {or
 - Itemize each query with a number and a period (e.g. "1. ").
 """
 
-RAG_PROMPT = """Answer the folowing question using the knowledge base provided. 
+RAG_PROMPT = """Answer the question using the following rules and knowledge base provided. 
+
+Rules:
+- The answer should comprise of two sections - Answer and Sources used.
+- In the answer section, provide a concise, well-formatted response to the user's question.
+- In the sources used section, justify which sources from the knowledge base were used in generating the answers.
+
+Knowledge Base: 
+{knowledge_base} 
 
 Question : \"{original_query}\"
-
-Knowledge Base: {documents}. 
-
-#Rules to answer:
-- Provide a concise response to the user's question.
-- Justify which extract was used in generating the answers.
 """
 
 REWARD_PROMPT = """Review the user's question and the corresponding response using the 5-point scoring system described below. Points are accumulated based on the satisfaction of each criterion:

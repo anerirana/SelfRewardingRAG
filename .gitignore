@@ -52,4 +52,6 @@ Thumbs.db
 *.tar
 
 credit_agreements_txt/
+credit_agreements_val/
+*.txt
 testing.py

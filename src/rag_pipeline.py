@@ -66,17 +66,21 @@ class RAGPipeline:
             # queries = self.extract_query_samples(language_model, qa_prompt)
 
             # top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
-
-            rag_prompt = RAG_PROMPT.format(original_query = original_query, documents = extracts)
-
+            knowledge_base = []
+            ctr = 0
+            for v in extracts2:
+                knowledge_base.append(f"Source {ctr+1}: {v}")
+                ctr+=1
+            rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+            print(rag_prompt)
             #TODO: Need to sample from the language model to get l answers
-            # responses = self.get_query_responses(language_model, rag_prompt)
+            responses = self.get_query_responses(language_model, rag_prompt)
             
-            r2 = language_model.forward(REWARD_PROMPT.format(original_query=original_query, answer = "Credit agreements don't have numerical limits."))
-            print(r2)
+            # r2 = language_model.forward(REWARD_PROMPT.format(original_query=original_query, answer = "Credit agreements don't have numerical limits."))
+            # print(r2)
 
-            r3 = language_model.forward(EXTRACT_CITATION_PROMPT.format(original_query=original_query, documents=extracts, answer = ideal_answer))
-            print(r3.split("[/INST]")[-1])
+            # r3 = language_model.forward(EXTRACT_CITATION_PROMPT.format(original_query=original_query, documents=extracts, answer = ideal_answer))
+            # print(r3.split("[/INST]")[-1])
             return
 
             # TODO: check this dimension
