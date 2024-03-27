@@ -2,6 +2,7 @@
 import numpy as np
 
 from llm import LLM
+from sentence_transformers import SentenceTransformer, util
 from document_retriver import DocumentRetrievalModel 
 from constants import *
 from preference_pair_generator import PreferencePairGenerator
@@ -34,7 +35,12 @@ class RAGPipeline:
         self.l = default(config.get('NumberOfResponses'), 5)
         self.k = default(config.get('NumberOfTopkDocuments'), 5)
         self.base_model = default(config.get('BaseModel'), 'google/flan-t5-xxl') 
+        self.citation_model = SentenceTransformer(default(config.get('CitationModel'), 'sentence-transformers/all-mpnet-base-v2'))
+        
 
+    #TODO: Implement prediction to get RAG responses and their rewards after training
+    def prediction(self):
+        pass
 
     def train(self, original_query, doc_ids=None):
         '''Executes a training loop of the RAGPipeline
@@ -62,7 +68,6 @@ class RAGPipeline:
 
         for i in range(self.m):
             queries = self.extract_query_samples(language_model, qa_prompt, original_query)
-
             top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
 
             knowledge_base = []
@@ -71,18 +76,17 @@ class RAGPipeline:
                 knowledge_base.append(f"Source {ctr+1}: {doc}")
                 ctr+=1
             rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-            
-
-            #TODO: Need to sample from the language model to get l answers
             responses = self.get_query_responses(language_model, rag_prompt)
             
 
             # TODO: check this dimension
-            contri_docs = top_k_docs*self.l
-            # responses, contri_docs = self.parser_responses(responses,i)                
+            # contri_docs = top_k_docs*self.l
+            # responses, contri_docs = self.parser_responses(responses,i)     
+            contri_docs = self.get_cited_documents(language_model, responses, original_query, top_k_docs)
+               
                  
             rewards = [self.get_rewards(language_model, original_query, response) for response in responses]
-            with open("output/output.txt","w") as f:
+            with open("output/response_rewards.txt","w") as f:
                 f.write("responses: ")
                 f.write(str(responses))
                 f.write("rewards: ")
@@ -209,6 +213,23 @@ class RAGPipeline:
             print(source_list)
 
         return responses    
+
+    def get_cited_documents(self, language_model, responses, original_query, top_k_docs):
+        cited_documents = []
+        docs_embedding = [self.citation_model.encode(doc, convert_to_tensor=True) for doc in top_k_docs] 
+        top_k_docs = np.asarray(top_k_docs) 
+        for response in responses:
+            response_embedding = self.citation_model.encode(response, convert_to_tensor=True)
+            scores = [util.pytorch_cos_sim(response_embedding, doc_embedding) for doc_embedding in docs_embedding]
+            scores = np.asarray(scores[0].cpu())
+            doc_indx = np.where(scores > 0.5)
+            cited_documents.append(top_k_docs[doc_indx])
+        
+        # for i in range(self.l):
+        #     prompt = EXTRACT_CITATION_PROMPT.format(original_query=original_query, extracts=top_k_docs, answer=responses[i])
+        #     language_model(prompt)
+        # return
+        return cited_documents
 
     # TODO
     def parser_responses(self, responses, index):
