@@ -6,7 +6,19 @@ QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {or
 - Itemize each query with a number and a period (e.g. "1. ").
 """
 
-RAG_PROMPT = """Answer the question using the following rules and knowledge base provided. 
+RAG_PROMPT = """
+Answer the folowing question using the knowledge base provided.  
+
+#Rules to answer:
+- Provide a concise, well-formatted response to the user's question.
+- The response should be in bullet points if needed.
+
+Knowledge Base: {knowledge_base}.
+
+Question : \"{original_query}\"
+"""
+
+RAG_CITATION_PROMPT = """Answer the question using the following rules and knowledge base provided. 
 
 Rules:
 - The answer should comprise of two sections - Answer and Sources used.
