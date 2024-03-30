@@ -43,6 +43,8 @@ class RAGPipeline:
         self.citation_model = SentenceTransformer(default(config.get('CitationModelName'), 'sentence-transformers/all-mpnet-base-v2'))
         self.training_mode = default(config.get('TrainingMode'), TrainingMode().SimiliarityScoreCitation)
 
+        self.document_retrieval_model = DocumentRetrievalModel()   
+        self.pp_generator = PreferencePairGenerator(self.language_model)
 
 
     #TODO: Implement prediction to get RAG responses and their rewards after training
@@ -57,9 +59,6 @@ class RAGPipeline:
         original_query
             The original query to generate responses for
         '''
-        # Create instances of required models
-        document_retrieval_model = DocumentRetrievalModel()   
-        pp_generator = PreferencePairGenerator(self.language_model)
     
         qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
 
@@ -70,11 +69,11 @@ class RAGPipeline:
         all_rewards = np.zeros((self.m, self.l), dtype=float)
         contributing_documents = []
         first_pps = []
-        count = tqdm(total=self.m, desc='Iterations', position=0)
+        count = tqdm(total=self.m, desc='RAG Iterations', position=0)
 
         for i in range(self.m):
-            queries = self.extract_query_samples(qa_prompt, original_query)
-            top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
+            queries = self.get_augmented_queries(qa_prompt, original_query)
+            top_k_docs, all_docs = self.document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
             
             knowledge_base = []
             if self.training_mode == TrainingMode().ResponseWithCitation:
@@ -97,7 +96,7 @@ class RAGPipeline:
                 f.write("rewards: ")
                 f.write(str(rewards))
 
-            pp1 = pp_generator.generateFirstPP(rag_prompt, responses, rewards)
+            pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
             
 
 
@@ -110,6 +109,7 @@ class RAGPipeline:
             contributing_documents.append(contri_docs)
             count.update(1)
         all_responses=np.array(all_responses)
+        pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
 
         print(">>"*100)
         print("aug_queries: ")            
@@ -126,11 +126,10 @@ class RAGPipeline:
         print(str(self.find_list_dimensions(contributing_documents)))
         print("first_pps: ")
         print(str(self.find_list_dimensions(first_pps)))
-        print(">>"*100)
-
-        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
         print("second_pps: ")
         print(len(pp2))
+        print(">>"*100)
+
 
         dpo_dataset_dict=self.dpo_parsing(first_pps,pp2)
 
@@ -248,7 +247,11 @@ class RAGPipeline:
             
             match = re.search("Final Score: ([0-9]+) out of 5", reward_response)
             if not match:
+                match =  re.search("Total score = ([0-9]+) out of 5", reward_response)
+            if not match:
                 match =  re.search("Score: ([0-9]+) out of 5", reward_response)
+
+            
 
             if match:
                 reward = match.group(1)  
@@ -263,7 +266,7 @@ class RAGPipeline:
         
         return reward
     
-    def extract_query_samples(self, qa_prompt, original_query):
+    def get_augmented_queries(self, qa_prompt, original_query):
         '''
         Extracts query samples from the language model
         '''

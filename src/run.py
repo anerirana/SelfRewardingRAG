@@ -7,7 +7,7 @@ model_config = {
   "NumberOfAugementedQueries":4,
   "NumberOfResponses":3,
   "NumberOfTopkDocuments":10,
-  "LanguageModelName":'unsloth/mistral-7b-bnb-4bit', #'mistralai/Mistral-7B-Instruct-v0.1'
+  "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
   "TrainingMode":TrainingMode().SimiliarityScoreCitation
 }
