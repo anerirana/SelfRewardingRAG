@@ -2,6 +2,7 @@
 import numpy as np
 
 from llm import LLM
+from sentence_transformers import SentenceTransformer, util
 from document_retriver import DocumentRetrievalModel 
 from constants import *
 from preference_pair_generator import PreferencePairGenerator
@@ -18,6 +19,11 @@ def exists(val):
 def default(val, default_value):
     return val if exists(val) else default_value
 
+class TrainingMode:
+  def __init__(self):
+    self.SimiliarityScoreCitation = "similiarity_score_citation"  
+    self.ResponseWithCitation = "response_with_citation"
+    self.IsolatedCitation = "isolated_citation"
 
 class RAGPipeline:
     def __init__(self, config: dict):
@@ -33,10 +39,19 @@ class RAGPipeline:
         self.n = default(config.get('NumberOfAugementedQueries'), 5)
         self.l = default(config.get('NumberOfResponses'), 5)
         self.k = default(config.get('NumberOfTopkDocuments'), 5)
-        self.base_model = default(config.get('BaseModel'), 'google/flan-t5-xxl') 
+        self.language_model = LLM(default(config.get('LanguageModelName'), 'mistralai/Mistral-7B-Instruct-v0.1'))
+        self.citation_model = SentenceTransformer(default(config.get('CitationModelName'), 'sentence-transformers/all-mpnet-base-v2'))
+        self.training_mode = default(config.get('TrainingMode'), TrainingMode().SimiliarityScoreCitation)
+
+        self.document_retrieval_model = DocumentRetrievalModel()   
+        self.pp_generator = PreferencePairGenerator(self.language_model)
 
 
-    def train(self, original_query, doc_ids=None):
+    #TODO: Implement prediction to get RAG responses and their rewards after training
+    def prediction(self):
+        pass
+
+    def train(self, original_query, epoch, doc_ids=None):
         '''Executes a training loop of the RAGPipeline
 
         Parameters:
@@ -44,10 +59,6 @@ class RAGPipeline:
         original_query
             The original query to generate responses for
         '''
-        # Create instances of required models
-        language_model = LLM(self.base_model)
-        document_retrieval_model = DocumentRetrievalModel()   
-        pp_generator = PreferencePairGenerator(language_model)
     
         qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
 
@@ -58,37 +69,34 @@ class RAGPipeline:
         all_rewards = np.zeros((self.m, self.l), dtype=float)
         contributing_documents = []
         first_pps = []
-        count = tqdm(total=self.m, desc='Iterations', position=0)
+        count = tqdm(total=self.m, desc='RAG Iterations', position=0)
 
         for i in range(self.m):
-            queries = self.extract_query_samples(language_model, qa_prompt, original_query)
-
-            top_k_docs, all_docs = document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
-
+            queries = self.get_augmented_queries(qa_prompt, original_query)
+            top_k_docs, all_docs = self.document_retrieval_model.forward(queries, doc_ids, self.p, self.k)
+            
             knowledge_base = []
-            ctr = 0
-            for doc in top_k_docs:
-                knowledge_base.append(f"Source {ctr+1}: {doc}")
-                ctr+=1
-            rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-            
+            if self.training_mode == TrainingMode().ResponseWithCitation:
+                ctr = 0
+                for doc in top_k_docs:
+                    knowledge_base.append(f"Source {ctr+1}: {doc}")
+                    ctr+=1
 
-            #TODO: Need to sample from the language model to get l answers
-            responses = self.get_query_responses(language_model, rag_prompt)
+            if self.training_mode == TrainingMode().ResponseWithCitation:
+                rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+            else:
+                rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
             
-
-            # TODO: check this dimension
-            contri_docs = top_k_docs*self.l
-            # responses, contri_docs = self.parser_responses(responses,i)                
-                 
-            rewards = [self.get_rewards(language_model, original_query, response) for response in responses]
-            with open("output/output.txt","w") as f:
+            responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
+               
+            rewards = [self.get_rewards(original_query, response) for response in responses]
+            with open("output/response_rewards.txt","a+") as f:
                 f.write("responses: ")
                 f.write(str(responses))
                 f.write("rewards: ")
                 f.write(str(rewards))
 
-            pp1 = pp_generator.generateFirstPP(rag_prompt, responses, rewards)
+            pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
             
 
 
@@ -101,35 +109,31 @@ class RAGPipeline:
             contributing_documents.append(contri_docs)
             count.update(1)
         all_responses=np.array(all_responses)
+        pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
 
-        print("aug_queries: ")            
-        print(str(self.find_list_dimensions(aug_queries)))
         print(">>"*100)
+        print("aug_queries: ")            
+        print(str(self.find_list_dimensions(aug_queries)))        
         print("all_documents: ")
         print(str(self.find_list_dimensions(all_documents)))
-        print(">>"*100)
         print("top_documents: ")
         print(str(self.find_list_dimensions(top_documents)))
-        print(">>"*100)
         print("all_responses: ")
         print(str(all_responses.shape))
-        print(">>"*100)
         print("all_rewards: ")
         print(str(all_rewards.shape))
-        print(">>"*100)
         print("contributing_documents: ")
         print(str(self.find_list_dimensions(contributing_documents)))
-        print(">>"*100)
         print("first_pps: ")
         print(str(self.find_list_dimensions(first_pps)))
-        print(">>"*100)
-        pp2 = pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
-
         print("second_pps: ")
         print(len(pp2))
+        print(">>"*100)
+
+
         dpo_dataset_dict=self.dpo_parsing(first_pps,pp2)
 
-        with open("output/all_variables.txt","w") as f:
+        with open("output/all_variables_epoch_" + str(epoch) + ".txt","w") as f:
             f.write("aug_queries: ")
 
             f.write(str(aug_queries))
@@ -162,7 +166,7 @@ class RAGPipeline:
         #TODO: load pp1 and pp2 in a dataset loader for training     
         
         
-        language_model.train(dpo_dataset_dict)
+        self.language_model.train(epoch, dpo_dataset_dict)
 
     def dpo_parsing(self,first_pps,pp2):
         dpo_dataset_dict={"prompt": [],"chosen": [], "rejected": []}
@@ -183,50 +187,71 @@ class RAGPipeline:
             return []
         return [len(lst)] + self.find_list_dimensions(lst[0])
           
-    def get_query_responses(self, language_model, rag_prompt):
+    def get_query_responses(self, rag_prompt, original_query, top_k_docs, i):
+        
         responses = []
-        for i in range(self.l):
-            llm_answer=language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
-            try:
-                answer, sources = re.split("sources?\s?used", llm_answer, flags=re.IGNORECASE)
-            except ValueError as e:
-                print("Response not in right format")
-                #TODO: Fall back to sentence similarity using llm_answer
-
-            # If "\nAnswer:" is found, extract the text after it
-            # if answer_index != -1:
-            #     text = text[answer_index+3:]  # +8 to skip past the "\nAnswer:" part
-            # else:
-            #     print("The string '\nAnswer:' was not found in the text.\n", text)
-
-            # r = r.split(rag_prompt)[-1] #Remove the prompt from the response
-            # r = r.replace("<s>", "").replace("</s>", "").replace("<pad>", "") #Remove special tokens
-                
-            source_list = re.findall("source.*\d+", sources, flags=re.I)
+        contri_docs = []
+ 
+        
+        for i in range(self.l):         
+            if self.training_mode == TrainingMode().ResponseWithCitation:
+                answer=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
+                try:
+                    answer, sources = re.split("sources?\s?used", answer, flags=re.IGNORECASE)
+                except ValueError as e:
+                    print("Response does not have correct sources format")
+                    #TODO: Fall back to sentence similarity using llm's answer
+                source_list = re.findall("source.*\d+", sources, flags=re.I)
+                contri_docs.append(source_list)
+            elif self.training_mode == TrainingMode().SimiliarityScoreCitation:
+                answer=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
 
             responses.append(answer)
-            print(sources)
-            print(source_list)
+            
+            # print(sources)
+            # print(source_list)
+        
+        # contri_docs = top_k_docs*self.l
+        if self.training_mode == TrainingMode().SimiliarityScoreCitation:
+            contri_docs = self.get_cited_documents(responses, original_query, top_k_docs)
 
-        return responses    
+        return responses, contri_docs   
 
-    # TODO
-    def parser_responses(self, responses, index):
-        return {}
+    def get_cited_documents(self, responses, original_query, top_k_docs):
+        cited_documents = []
+        docs_embedding = [self.citation_model.encode(doc, convert_to_tensor=True) for doc in top_k_docs] 
+        top_k_docs = np.asarray(top_k_docs) 
+        for response in responses:
+            response_embedding = self.citation_model.encode(response, convert_to_tensor=True)
+            scores = [util.pytorch_cos_sim(response_embedding, doc_embedding) for doc_embedding in docs_embedding]
+            scores = np.asarray(scores[0].cpu())
+            doc_indx = np.where(scores > 0.5)
+            cited_documents.append(top_k_docs[doc_indx])
+        
+        # for i in range(self.l):
+        #     prompt = EXTRACT_CITATION_PROMPT.format(original_query=original_query, extracts=top_k_docs, answer=responses[i])
+        #     self.language_model(prompt)
+        # return
+        return cited_documents
 
-    def get_rewards(self, language_model, original_query, response):
+    def get_rewards(self, original_query, response):
         max_tries = 5
         j = 0
         do_retry = True
         reward=-1
+        reward_prompt = REWARD_PROMPT.format(original_query = original_query, answer = response)
         while j < max_tries and do_retry:
             
             j=j+1
-            reward_response = language_model(REWARD_PROMPT.format(original_query = original_query, answer = response))
+            reward_response = self.language_model(reward_prompt)
             
             match = re.search("Final Score: ([0-9]+) out of 5", reward_response)
             if not match:
+                match =  re.search("Total score = ([0-9]+) out of 5", reward_response)
+            if not match:
                 match =  re.search("Score: ([0-9]+) out of 5", reward_response)
+
+            
 
             if match:
                 reward = match.group(1)  
@@ -234,14 +259,14 @@ class RAGPipeline:
         
         if do_retry:
             with open("output/reward_error.txt","a") as f:
-                f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
+                f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
 
 
                 # raise Exception("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
         
         return reward
     
-    def extract_query_samples(self, language_model, qa_prompt, original_query):
+    def get_augmented_queries(self, qa_prompt, original_query):
         '''
         Extracts query samples from the language model
         '''
@@ -253,7 +278,7 @@ class RAGPipeline:
 
         while j < max_tries and sanity_check == False:
             j += 1
-            response = language_model(qa_prompt, SAMPLING_PARAMS_DICT)
+            response = self.language_model(qa_prompt, SAMPLING_PARAMS_DICT)
             sanity_check = True
             for i in range(1, self.n+1):
                 if f"{i}." not in response:

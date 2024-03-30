@@ -1,13 +1,20 @@
-from rag_pipeline import RAGPipeline
+from rag_pipeline import RAGPipeline, TrainingMode
 
+NUM_TRAIN_EPOCHS = 5
 model_config = {
   "NumberOfRetrievedDocuments":8,
   "NumberOfQuerySets":5,
   "NumberOfAugementedQueries":4,
   "NumberOfResponses":3,
   "NumberOfTopkDocuments":10,
-  "BaseModel":"google/flan-t5-xxl"
+  "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
+  "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
+  "TrainingMode":TrainingMode().SimiliarityScoreCitation
 }
 rag_pipeline = RAGPipeline(model_config)
-original_query = "Thoroughly examine the given Credit Agreement to identify, summarize, and accentuate the key numerical aspects of any limitations on indebtedness, including conditions allowing borrowers to take on additional debt, any relevant exceptions, and specific numerical figures or values. Clearly cite relevant sections, paragraphs, or clauses, and provide a concise summary highlighting financial metrics and quantitative data."
-rag_pipeline.train(original_query)
+original_query = "What is the maximum aggregate principal amount of the commitments provided under this credit agreement?"
+doc_ids = ["4c2ec99f83bc81396ff37d5e7abf9880b713a61fc0d6c7b5e1fce184653e226b"]
+
+for epoch in range(NUM_TRAIN_EPOCHS):
+    print("=="*20 + " EPOCH " + str(epoch) + "=="*20)
+    rag_pipeline.train(original_query,epoch,doc_ids=doc_ids)
