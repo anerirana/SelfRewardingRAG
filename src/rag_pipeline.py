@@ -1,5 +1,5 @@
-
 import numpy as np
+from evaluate import load
 
 from llm import LLM
 from sentence_transformers import SentenceTransformer, util
@@ -11,7 +11,8 @@ from constants import *
 import re
 from tqdm import tqdm
 
-
+import nltk
+from nltk.translate.bleu_score import corpus_bleu
 # Utilities
 def exists(val):
     return val is not None
@@ -48,10 +49,9 @@ class RAGPipeline:
 
 
     #TODO: Implement prediction to get RAG responses and their rewards after training
-    def prediction(self):
-        pass
 
     def train(self, original_queries, epoch, doc_ids=None):
+        # self.prediction(original_queries,doc_ids)
         '''Executes a training loop of the RAGPipeline
 
         Parameters:
@@ -163,6 +163,50 @@ class RAGPipeline:
                 dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
         print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
         self.language_model.train(epoch, dpo_dataset_dict)
+    def compute_bleu_score(self,references, candidates):
+        print("?????"*50)
+        print(references)
+        print(candidates)
+        print("???????"*50)
+        """
+    Compute BLEU score given references and candidate translations.
+
+    Args:
+        references (list of list of str): A list of lists, each inner list contains reference translations for one sentence.
+        candidates (list of str): A list of candidate translations.
+
+    Returns:
+        float: BLEU score.
+    """
+    # Load BLEU metric using the updated library
+        bleu_metric = load("bleu")
+
+        # Compute BLEU score
+        bleu_score = bleu_metric.compute(predictions=candidates, references=references)
+
+        return(bleu_score)  # Print the output for debugging
+
+
+    def prediction(self,query,doc_ids):
+        # print(doc_ids)
+        queries=[]
+        queries.append(query)        
+        top_k_docs, all_docs = self.document_retrieval_model.forward(queries, doc_ids, self.p, self.k) 
+        top_k_docs=top_k_docs[0]  
+        rag_prompt = RAG_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(top_k_docs))
+        responses=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
+        print("RESPONSES")
+        print(type(responses))
+        print(responses)
+        q=[responses]
+        z=[]
+        l=[]
+        for i in top_k_docs:
+            l.append([i])
+        z.append(l)
+        print(self.compute_bleu_score(z,q))
+
+
 
     def dpo_parsing(self,first_pps,pp2):
         dataset_dict={"prompt": [],"chosen": [], "rejected": []}
@@ -315,3 +359,12 @@ class RAGPipeline:
         else:
             queries = queries[:self.n]
         return queries
+
+
+
+
+
+
+
+
+
