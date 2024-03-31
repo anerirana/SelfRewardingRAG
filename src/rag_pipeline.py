@@ -1,5 +1,6 @@
 import numpy as np
 from evaluate import load
+from datasets import load_metric
 
 from llm import LLM
 from sentence_transformers import SentenceTransformer, util
@@ -50,8 +51,12 @@ class RAGPipeline:
 
     #TODO: Implement prediction to get RAG responses and their rewards after training
 
-    def train(self, original_queries, epoch, doc_ids=None):
-        # self.prediction(original_queries,doc_ids)
+    def train(self, original_queries, epoch, real_ans,doc_ids=None):
+        # for i in range(0,len(original_queries[0])):
+        #     print("-----")
+        #     print(original_queries[0][i])
+        #     print(real_ans[i])
+        #     self.prediction(original_queries[0][i],doc_ids,real_ans[i])
         '''Executes a training loop of the RAGPipeline
 
         Parameters:
@@ -63,6 +68,7 @@ class RAGPipeline:
         count = tqdm(total=self.m*len(original_queries), desc='RAG Iterations', position=0)
         for i, doc_id in enumerate(doc_ids):
             for original_query in original_queries[i]:
+                print(original_query)
                 qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
                 aug_queries = []
                 all_documents = []
@@ -74,7 +80,9 @@ class RAGPipeline:
 
                 for i in range(self.m):
                     queries = self.get_augmented_queries(qa_prompt, original_query)
+                    print("Got queries")
                     top_k_docs, all_docs = self.document_retrieval_model.forward(queries, [doc_id], self.p, self.k)
+                    print("top k")
                     
                     knowledge_base = []
                     if self.training_mode == TrainingMode().ResponseWithCitation:
@@ -87,15 +95,17 @@ class RAGPipeline:
                         rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
                     else:
                         rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-                    
+                    print("prompt ready")
                     responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
-                      
+                    print("got responses")
                     rewards = [self.get_rewards(original_query, response) for response in responses]
                     with open("output/response_rewards.txt","a+") as f:
                         f.write("responses: ")
                         f.write(str(responses))
                         f.write("rewards: ")
                         f.write(str(rewards))
+                    
+                    print("above pp1")
 
                     pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
                     
@@ -109,6 +119,7 @@ class RAGPipeline:
                     all_rewards[i] = rewards
                     contributing_documents.append(contri_docs)
                     count.update(1)
+                print("outside")
                 all_responses=np.array(all_responses)
                 pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
 
@@ -162,32 +173,42 @@ class RAGPipeline:
                 
                 dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
         print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
+
+        # torch.cuda.set_device(0)  # Assuming you want to use the first GPU
+
+        # Train the model on that GPU
         self.language_model.train(epoch, dpo_dataset_dict)
-    def compute_bleu_score(self,references, candidates):
-        print("?????"*50)
-        print(references)
-        print(candidates)
-        print("???????"*50)
+    def compute_scores(self,references, candidates):
         """
-    Compute BLEU score given references and candidate translations.
+        Compute multiple scores (BLEU, ROUGE, METEOR, etc.) given references and candidate translations.
 
-    Args:
-        references (list of list of str): A list of lists, each inner list contains reference translations for one sentence.
-        candidates (list of str): A list of candidate translations.
+        Args:
+            references (list of list of str): A list of lists, each inner list contains reference translations for one sentence.
+            candidates (list of str): A list of candidate translations.
 
-    Returns:
-        float: BLEU score.
-    """
-    # Load BLEU metric using the updated library
+        Returns:
+            dict: Dictionary of scores including BLEU, ROUGE, METEOR, etc.
+        """
+        scores = {}
+
+        # Load and compute BLEU score
         bleu_metric = load("bleu")
+        scores['BLEU'] = bleu_metric.compute(predictions=candidates, references=references)
 
-        # Compute BLEU score
-        bleu_score = bleu_metric.compute(predictions=candidates, references=references)
+        # Load and compute ROUGE score
+        rouge_metric = load_metric("rouge")
+        scores['ROUGE'] = rouge_metric.compute(predictions=candidates, references=references)
 
-        return(bleu_score)  # Print the output for debugging
+        # Load and compute METEOR score
+        meteor_metric = load_metric("meteor")
+        scores['METEOR'] = meteor_metric.compute(predictions=candidates, references=references)
+
+        # You can add more metrics here in a similar fashion
+
+        return scores
 
 
-    def prediction(self,query,doc_ids):
+    def prediction(self,query,doc_ids,real_ans):
         # print(doc_ids)
         queries=[]
         queries.append(query)        
@@ -195,8 +216,11 @@ class RAGPipeline:
         top_k_docs=top_k_docs[0]  
         rag_prompt = RAG_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(top_k_docs))
         responses=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
-        print("RESPONSES")
-        print(type(responses))
+        # print("RESPONSES")
+        # print(type(responses))
+        print('==========='*50)
+        print(query)
+        print(real_ans)
         print(responses)
         q=[responses]
         z=[]
@@ -204,7 +228,10 @@ class RAGPipeline:
         for i in top_k_docs:
             l.append([i])
         z.append(l)
-        print(self.compute_bleu_score(z,q))
+        print(self.compute_scores([[real_ans]],q))
+        rewards = [self.get_rewards(original_query, response) for response in responses]
+        print(rewards)
+        print('==========='*50)
 
 
 
