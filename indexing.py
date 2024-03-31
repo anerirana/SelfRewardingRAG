@@ -101,10 +101,8 @@ def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database", new
 if __name__ == "__main__":
     dir_path = '/scratch/workspace/arana_umass_edu-goldamn_project/data/new_txt_extracts/' 
     start_time = time.time()
-    doc_ids = ['25d6ead54bf9061aedbb10b41f3fe6b40e4ce80e38a42f278b3885d94882faf1', '30e22fc99db427ca6cb1384c3f48e1bed3b349b5941264e416763828579febfa', '473f11e9beddbadbea1b4a27f44db6e1c7fc49ac134c6ce52d902b7fe166de8f', '4c2ec99f83bc81396ff37d5e7abf9880b713a61fc0d6c7b5e1fce184653e226b', '67a73b3cf3b1891210f076edaec46a82a847e9b14ef69d24cb2511bc620f1183', '8d235669280f2f0ac8d14fb1dea84bd8250cfaa6c475cc107b69f08d0d4f61b5', '9daa7f8ea8e6c0ed9294f2e2355ffc74d5badfdae430133ef556d0404f697cf1', 'aecb1c3e851cce69ba6e66726c0d345fce3efddd9c6ea7c8d2cccd91e1d13620']
     fetch_docs_from_text(dir_path, 
-    index_path="/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_8",
-    doc_ids=doc_ids)
+    index_path="/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_val_and_test")
     end_time = time.time()
     execution_time = (end_time - start_time)/60
     print(f"Execution time: {execution_time} minutes")
