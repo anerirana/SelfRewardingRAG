@@ -13,7 +13,8 @@ Answer the folowing question using the knowledge base provided.
 - Provide a concise, well-formatted response to the user's question.
 - The response should be in bullet points if needed.
 
-Knowledge Base: {knowledge_base}.
+Knowledge Base: 
+\"{knowledge_base}\"
 
 Question : \"{original_query}\"
 """
@@ -26,7 +27,7 @@ Rules:
 - In the sources used section, justify which sources from the knowledge base were used in generating the answers.
 
 Knowledge Base: 
-{knowledge_base} 
+\"{knowledge_base}\"
 
 Question : \"{original_query}\"
 """

@@ -65,7 +65,8 @@ class RAGPipeline:
             The original query to generate responses for
         '''
         dpo_dataset_dict = {}
-        count = tqdm(total=self.m*len(original_queries), desc='RAG Iterations', position=0)
+        count = tqdm(total=self.m*len(original_queries[0])*len(original_queries), desc='RAG Iterations', position=0)
+        f = open("output/all_variables_epoch_" + str(epoch) + ".txt","x")
         for i, doc_id in enumerate(doc_ids):
             for original_query in original_queries[i]:
                 print(original_query)
@@ -85,12 +86,11 @@ class RAGPipeline:
                     print("top k")
                     
                     knowledge_base = []
-                    if self.training_mode == TrainingMode().ResponseWithCitation:
-                        ctr = 0
-                        for doc in top_k_docs:
-                            knowledge_base.append(f"Source {ctr+1}: {doc}")
-                            ctr+=1
-
+                    ctr = 0
+                    for doc in top_k_docs:
+                        knowledge_base.append(f"Source {ctr+1}: {doc}")
+                        ctr+=1
+                    
                     if self.training_mode == TrainingMode().ResponseWithCitation:
                         rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
                     else:
@@ -99,13 +99,15 @@ class RAGPipeline:
                     responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
                     print("got responses")
                     rewards = [self.get_rewards(original_query, response) for response in responses]
-                    with open("output/response_rewards.txt","a+") as f:
-                        f.write("responses: ")
-                        f.write(str(responses))
-                        f.write("rewards: ")
-                        f.write(str(rewards))
-                    
-                    print("above pp1")
+                    try:
+                        f = open("output/response_rewards.txt","a")                    
+                    except:
+                        f = open("output/response_rewards.txt","w")
+                    f.write("responses: ")
+                    f.write(str(responses))
+                    f.write("rewards: ")
+                    f.write(str(rewards))
+                    f.close()
 
                     pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
                     
@@ -114,7 +116,7 @@ class RAGPipeline:
                     first_pps.append(pp1)
                     aug_queries.append(queries)
                     all_documents.append(all_docs)           
-                    top_documents.append(top_k_docs[0])
+                    top_documents.append(top_k_docs)
                     all_responses.append(responses)
                     all_rewards[i] = rewards
                     contributing_documents.append(contri_docs)
@@ -142,7 +144,7 @@ class RAGPipeline:
                 # print(len(pp2))
                 # print(">>"*100)
 
-                with open("output/all_variables_epoch_" + str(epoch) + ".txt","a+") as f:
+                with open("output/all_variables_epoch_" + str(epoch) + ".txt","a") as f:
                     f.write("original_query: ")
                     f.write(str(original_query))
                     f.write(">>"*100)
@@ -287,18 +289,20 @@ class RAGPipeline:
     def get_cited_documents(self, responses, original_query, top_k_docs):
         cited_documents = []
         docs_embedding = [self.citation_model.encode(doc, convert_to_tensor=True) for doc in top_k_docs] 
-        top_k_docs = np.asarray(top_k_docs) 
         for response in responses:
             response_embedding = self.citation_model.encode(response, convert_to_tensor=True)
-            scores = [util.pytorch_cos_sim(response_embedding, doc_embedding) for doc_embedding in docs_embedding]
-            scores = np.asarray(scores[0].cpu())
-            doc_indx = np.where(scores > 0.5)
-            cited_documents.append(top_k_docs[doc_indx])
+            scores = np.array([util.pytorch_cos_sim(response_embedding, doc_embedding).tolist()[0][0] for doc_embedding in docs_embedding])
+            
+            doc_indx = np.where(scores > 0.5)[0]
+            cited_documents.append(np.array(top_k_docs)[doc_indx])
+                
+            
         
         # for i in range(self.l):
         #     prompt = EXTRACT_CITATION_PROMPT.format(original_query=original_query, extracts=top_k_docs, answer=responses[i])
         #     self.language_model(prompt)
         # return
+        f.close()
         return cited_documents
 
     def get_rewards(self, original_query, response):
@@ -325,11 +329,14 @@ class RAGPipeline:
                 do_retry = False
         
         if do_retry:
-            with open("output/reward_error.txt","a") as f:
-                f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
-
-
-                # raise Exception("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
+            try:
+                with open("output/reward_error.txt","a") as f:
+                    f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
+                    # raise Exception("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
+            except:
+                with open("output/reward_error.txt","w") as f:
+                    f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
+                    
         
         return reward
     
@@ -360,10 +367,16 @@ class RAGPipeline:
             match = re.search(pattern + r"\.(.*\?)",response)
             if not match:
                 match = re.search(str(i)+r"\.(.*\?)",response)
+            if not match and i == self.n - 1:
+                match = re.search(str(i)+r"\.(.*)",response)
             if not match:
-                with open("output/query_aug_error.txt","a+") as f:
-                    f.write(f"Query version {i} not found in response:")
-                    f.write(str(response))
+                try:
+                    f = open("output/query_aug_error.txt","a")
+                except:
+                    f = open("output/query_aug_error.txt","w")
+                f.write(f"Query version {i} not found in response:")
+                f.write(str(response))
+                f.close()
                 break
             else:
                 queries.append(match.group(1))
