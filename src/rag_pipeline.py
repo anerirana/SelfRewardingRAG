@@ -1,5 +1,4 @@
 import numpy as np
-from evaluate import load
 from datasets import load_metric
 
 from llm import LLM
@@ -51,12 +50,7 @@ class RAGPipeline:
 
     #TODO: Implement prediction to get RAG responses and their rewards after training
 
-    def train(self, original_queries, epoch, real_ans,doc_ids=None):
-        # for i in range(0,len(original_queries[0])):
-        #     print("-----")
-        #     print(original_queries[0][i])
-        #     print(real_ans[i])
-        #     self.prediction(original_queries[0][i],doc_ids,real_ans[i])
+    def train(self, original_queries, epoch, doc_ids=None):
         '''Executes a training loop of the RAGPipeline
 
         Parameters:
@@ -81,9 +75,7 @@ class RAGPipeline:
 
                 for i in range(self.m):
                     queries = self.get_augmented_queries(qa_prompt, original_query)
-                    print("Got queries")
                     top_k_docs, all_docs = self.document_retrieval_model.forward(queries, [doc_id], self.p, self.k)
-                    print("top k")
                     
                     knowledge_base = []
                     ctr = 0
@@ -95,9 +87,7 @@ class RAGPipeline:
                         rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
                     else:
                         rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-                    print("prompt ready")
                     responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
-                    print("got responses")
                     rewards = [self.get_rewards(original_query, response) for response in responses]
                     try:
                         f = open("output/response_rewards.txt","a")                    
@@ -218,22 +208,13 @@ class RAGPipeline:
         top_k_docs=top_k_docs[0]  
         rag_prompt = RAG_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(top_k_docs))
         responses=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
-        # print("RESPONSES")
-        # print(type(responses))
-        print('==========='*50)
-        print(query)
-        print(real_ans)
-        print(responses)
         q=[responses]
         z=[]
         l=[]
         for i in top_k_docs:
             l.append([i])
         z.append(l)
-        print(self.compute_scores([[real_ans]],q))
         rewards = [self.get_rewards(original_query, response) for response in responses]
-        print(rewards)
-        print('==========='*50)
 
 
 
