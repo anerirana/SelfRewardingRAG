@@ -12,7 +12,6 @@ class DocumentRetrievalModel:
     def forward(self, queries, doc_ids, p, k):
         # Logic to retrieve and return a list of documents based on the query
         # Placeholder implementation
-        top_k_documents = []
         all_documents = []
         all_ranks = []
         for query in queries:   
@@ -23,7 +22,7 @@ class DocumentRetrievalModel:
                 all_ranks.append(x['rank'])               
             all_documents.append(row)
             
-        top_k_documents.append(self.reciprocal_rank_fusion(all_documents, all_ranks, k))
+        top_k_documents = self.reciprocal_rank_fusion(all_documents, all_ranks, k)
         return top_k_documents, all_documents
     
     def reciprocal_rank_fusion(self, all_documents, all_ranks, k):

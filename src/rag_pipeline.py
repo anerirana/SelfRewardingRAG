@@ -1,5 +1,5 @@
-
 import numpy as np
+from datasets import load_metric
 
 from llm import LLM
 from sentence_transformers import SentenceTransformer, util
@@ -10,7 +10,6 @@ from document_retriver import DocumentRetrievalModel
 from constants import *
 import re
 from tqdm import tqdm
-
 
 # Utilities
 def exists(val):
@@ -48,8 +47,6 @@ class RAGPipeline:
 
 
     #TODO: Implement prediction to get RAG responses and their rewards after training
-    def prediction(self):
-        pass
 
     def train(self, original_queries, epoch, doc_ids=None):
         '''Executes a training loop of the RAGPipeline
@@ -60,7 +57,8 @@ class RAGPipeline:
             The original query to generate responses for
         '''
         dpo_dataset_dict = {}
-        count = tqdm(total=self.m*len(original_queries), desc='RAG Iterations', position=0)
+        count = tqdm(total=self.m*len(original_queries[0])*len(original_queries), desc='RAG Iterations', position=0)
+        f = open("output/all_variables_epoch_" + str(epoch) + ".txt","x")
         for i, doc_id in enumerate(doc_ids):
             for original_query in original_queries[i]:
                 qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
@@ -77,25 +75,26 @@ class RAGPipeline:
                     top_k_docs, all_docs = self.document_retrieval_model.forward(queries, [doc_id], self.p, self.k)
                     
                     knowledge_base = []
-                    if self.training_mode == TrainingMode().ResponseWithCitation:
-                        ctr = 0
-                        for doc in top_k_docs:
-                            knowledge_base.append(f"Source {ctr+1}: {doc}")
-                            ctr+=1
-
+                    ctr = 0
+                    for doc in top_k_docs:
+                        knowledge_base.append(f"Source {ctr+1}: {doc}")
+                        ctr+=1
+                    
                     if self.training_mode == TrainingMode().ResponseWithCitation:
                         rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
                     else:
                         rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-                    
                     responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
-                      
                     rewards = [self.get_rewards(original_query, response) for response in responses]
-                    with open("output/response_rewards.txt","a+") as f:
-                        f.write("responses: ")
-                        f.write(str(responses))
-                        f.write("rewards: ")
-                        f.write(str(rewards))
+                    try:
+                        f = open("output/response_rewards.txt","a")                    
+                    except:
+                        f = open("output/response_rewards.txt","w")
+                    f.write("responses: ")
+                    f.write(str(responses))
+                    f.write("rewards: ")
+                    f.write(str(rewards))
+                    f.close()
 
                     pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
                     
@@ -104,11 +103,12 @@ class RAGPipeline:
                     first_pps.append(pp1)
                     aug_queries.append(queries)
                     all_documents.append(all_docs)           
-                    top_documents.append(top_k_docs[0])
+                    top_documents.append(top_k_docs)
                     all_responses.append(responses)
                     all_rewards[i] = rewards
                     contributing_documents.append(contri_docs)
                     count.update(1)
+                print("outside")
                 all_responses=np.array(all_responses)
                 pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
 
@@ -131,7 +131,7 @@ class RAGPipeline:
                 # print(len(pp2))
                 # print(">>"*100)
 
-                with open("output/all_variables_epoch_" + str(epoch) + ".txt","a+") as f:
+                with open("output/all_variables_epoch_" + str(epoch) + ".txt","a") as f:
                     f.write("original_query: ")
                     f.write(str(original_query))
                     f.write(">>"*100)
@@ -162,7 +162,58 @@ class RAGPipeline:
                 
                 dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
         print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
+
+        # torch.cuda.set_device(0)  # Assuming you want to use the first GPU
+
+        # Train the model on that GPU
         self.language_model.train(epoch, dpo_dataset_dict)
+    def compute_scores(self,references, candidates):
+        """
+        Compute multiple scores (BLEU, ROUGE, METEOR, etc.) given references and candidate translations.
+
+        Args:
+            references (list of list of str): A list of lists, each inner list contains reference translations for one sentence.
+            candidates (list of str): A list of candidate translations.
+
+        Returns:
+            dict: Dictionary of scores including BLEU, ROUGE, METEOR, etc.
+        """
+        scores = {}
+
+        # Load and compute BLEU score
+        bleu_metric = load("bleu")
+        scores['BLEU'] = bleu_metric.compute(predictions=candidates, references=references)
+
+        # Load and compute ROUGE score
+        rouge_metric = load_metric("rouge")
+        scores['ROUGE'] = rouge_metric.compute(predictions=candidates, references=references)
+
+        # Load and compute METEOR score
+        meteor_metric = load_metric("meteor")
+        scores['METEOR'] = meteor_metric.compute(predictions=candidates, references=references)
+
+        # You can add more metrics here in a similar fashion
+
+        return scores
+
+
+    def prediction(self,query,doc_ids,real_ans):
+        # print(doc_ids)
+        queries=[]
+        queries.append(query)        
+        top_k_docs, all_docs = self.document_retrieval_model.forward(queries, doc_ids, self.p, self.k) 
+        top_k_docs=top_k_docs[0]  
+        rag_prompt = RAG_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(top_k_docs))
+        responses=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
+        q=[responses]
+        z=[]
+        l=[]
+        for i in top_k_docs:
+            l.append([i])
+        z.append(l)
+        rewards = [self.get_rewards(original_query, response) for response in responses]
+
+
 
     def dpo_parsing(self,first_pps,pp2):
         dataset_dict={"prompt": [],"chosen": [], "rejected": []}
@@ -216,13 +267,14 @@ class RAGPipeline:
     def get_cited_documents(self, responses, original_query, top_k_docs):
         cited_documents = []
         docs_embedding = [self.citation_model.encode(doc, convert_to_tensor=True) for doc in top_k_docs] 
-        top_k_docs = np.asarray(top_k_docs) 
         for response in responses:
             response_embedding = self.citation_model.encode(response, convert_to_tensor=True)
-            scores = [util.pytorch_cos_sim(response_embedding, doc_embedding) for doc_embedding in docs_embedding]
-            scores = np.asarray(scores[0].cpu())
-            doc_indx = np.where(scores > 0.5)
-            cited_documents.append(top_k_docs[doc_indx])
+            scores = np.array([util.pytorch_cos_sim(response_embedding, doc_embedding).tolist()[0][0] for doc_embedding in docs_embedding])
+            
+            doc_indx = np.where(scores > 0.5)[0]
+            cited_documents.append(np.array(top_k_docs)[doc_indx])
+                
+            
         
         # for i in range(self.l):
         #     prompt = EXTRACT_CITATION_PROMPT.format(original_query=original_query, extracts=top_k_docs, answer=responses[i])
@@ -254,11 +306,14 @@ class RAGPipeline:
                 do_retry = False
         
         if do_retry:
-            with open("output/reward_error.txt","a") as f:
-                f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
-
-
-                # raise Exception("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
+            try:
+                with open("output/reward_error.txt","a") as f:
+                    f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
+                    # raise Exception("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
+            except:
+                with open("output/reward_error.txt","w") as f:
+                    f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
+                    
         
         return reward
     
@@ -289,10 +344,16 @@ class RAGPipeline:
             match = re.search(pattern + r"\.(.*\?)",response)
             if not match:
                 match = re.search(str(i)+r"\.(.*\?)",response)
+            if not match and i == self.n - 1:
+                match = re.search(str(i)+r"\.(.*)",response)
             if not match:
-                with open("output/query_aug_error.txt","a+") as f:
-                    f.write(f"Query version {i} not found in response:")
-                    f.write(str(response))
+                try:
+                    f = open("output/query_aug_error.txt","a")
+                except:
+                    f = open("output/query_aug_error.txt","w")
+                f.write(f"Query version {i} not found in response:")
+                f.write(str(response))
+                f.close()
                 break
             else:
                 queries.append(match.group(1))
@@ -315,3 +376,12 @@ class RAGPipeline:
         else:
             queries = queries[:self.n]
         return queries
+
+
+
+
+
+
+
+
+
