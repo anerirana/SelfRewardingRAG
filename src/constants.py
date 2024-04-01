@@ -6,18 +6,29 @@ QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {or
 - Itemize each query with a number and a period (e.g. "1. ").
 """
 
-RAG_PROMPT = """You are a financial document expert. 
-
-Question : \"{original_query}\"
-
-Knowledge Base: {documents}. 
+RAG_PROMPT = """
+Answer the folowing question using the knowledge base provided.  
 
 #Rules to answer:
-- Provide a concise response to the user's question.
-- The response should be in bullet points. 
-- Last bullet point has to be "Extracts used: [extract numbers]"
+- Provide a concise, well-formatted response to the user's question.
+- The response should be in bullet points if needed.
 
-Remember, both the response and the extracts used are important.
+Knowledge Base: {knowledge_base}.
+
+Question : \"{original_query}\"
+"""
+
+RAG_CITATION_PROMPT = """Answer the question using the following rules and knowledge base provided. 
+
+Rules:
+- The answer should comprise of two sections - Answer and Sources used.
+- In the answer section, provide a concise, well-formatted response to the user's question.
+- In the sources used section, justify which sources from the knowledge base were used in generating the answers.
+
+Knowledge Base: 
+{knowledge_base} 
+
+Question : \"{original_query}\"
 """
 
 REWARD_PROMPT = """Review the user's question and the corresponding response using the 5-point scoring system described below. Points are accumulated based on the satisfaction of each criterion:
@@ -40,7 +51,7 @@ After examining the user's instruction and the response:
 Remember to assess from the AI Assistant perspective, utilizing web search knowledge as necessary. """
 
 SAMPLING_PARAMS_DICT = {
-            "temperature":random.choice([0.1,0.2,0.3,0.4]), 
+            "temperature":0.7, 
             "top_p":random.choice([0.99, 0.8, 0.7, 0.6, 0.5]), 
             "repetition_penalty":random.choice([1.2, 1.3, 1.4, 1.5]), 
             "min_new_tokens":random.choice([16, 32, 64, 128]), 

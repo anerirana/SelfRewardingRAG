@@ -4,7 +4,7 @@ from functools import partial
 from collections import defaultdict
    
 class DocumentRetrievalModel:
-    def __init__(self, path_to_index = "../.ragatouille/colbert/indexes/credit_agreement_database"):
+    def __init__(self, path_to_index = "/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_val_and_test"):
         # Initialize components specific to Document Retrieval
         self.path_to_index = path_to_index
         self.RAG = RAGPretrainedModel.from_index(path_to_index)
@@ -12,11 +12,11 @@ class DocumentRetrievalModel:
     def forward(self, queries, doc_ids, p, k):
         # Logic to retrieve and return a list of documents based on the query
         # Placeholder implementation
-        all_results = self.RAG.search(query=queries, k=p, doc_ids=doc_ids)
         top_k_documents = []
         all_documents = []
         all_ranks = []
-        for result in all_results:     
+        for query in queries:   
+            result = self.RAG.search(query=query, k=p, doc_ids=doc_ids)
             row = []      
             for x in result:
                 row.append(x['content'])
