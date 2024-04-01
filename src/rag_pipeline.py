@@ -302,7 +302,6 @@ class RAGPipeline:
         #     prompt = EXTRACT_CITATION_PROMPT.format(original_query=original_query, extracts=top_k_docs, answer=responses[i])
         #     self.language_model(prompt)
         # return
-        f.close()
         return cited_documents
 
     def get_rewards(self, original_query, response):
