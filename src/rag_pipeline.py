@@ -11,8 +11,6 @@ from constants import *
 import re
 from tqdm import tqdm
 
-import nltk
-from nltk.translate.bleu_score import corpus_bleu
 # Utilities
 def exists(val):
     return val is not None
@@ -63,7 +61,6 @@ class RAGPipeline:
         f = open("output/all_variables_epoch_" + str(epoch) + ".txt","x")
         for i, doc_id in enumerate(doc_ids):
             for original_query in original_queries[i]:
-                print(original_query)
                 qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
                 aug_queries = []
                 all_documents = []
