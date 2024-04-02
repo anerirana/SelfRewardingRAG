@@ -51,6 +51,7 @@ Thumbs.db
 *.xz
 *.tar
 *.txt
+*.jsonl
 
 credit_agreements_txt/
 credit_agreements_val/
@@ -58,3 +59,5 @@ testing.py
 data/
 output/
 ragatouille/
+training_dataset/
+wandb/

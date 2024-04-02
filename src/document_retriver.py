@@ -4,7 +4,7 @@ from functools import partial
 from collections import defaultdict
    
 class DocumentRetrievalModel:
-    def __init__(self, path_to_index = "/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_val_and_test"):
+    def __init__(self, path_to_index = "/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_8"):
         # Initialize components specific to Document Retrieval
         self.path_to_index = path_to_index
         self.RAG = RAGPretrainedModel.from_index(path_to_index)
