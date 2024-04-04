@@ -1,6 +1,6 @@
 import numpy as np
 from datasets import load_metric
-
+import os
 from llm import LLM
 from sentence_transformers import SentenceTransformer, util
 from document_retriver import DocumentRetrievalModel 
@@ -10,6 +10,9 @@ from document_retriver import DocumentRetrievalModel
 from constants import *
 import re
 from tqdm import tqdm
+from datasets import load_metric as load
+import evaluate
+import csv
 
 # Utilities
 def exists(val):
@@ -48,7 +51,9 @@ class RAGPipeline:
 
     #TODO: Implement prediction to get RAG responses and their rewards after training
 
-    def train(self, original_queries, epoch, doc_ids=None):
+    def train(self, original_queries, epoch,orignal_answer, doc_ids=None):
+        for i in range(0,len(original_queries[0])):
+            self.prediction(original_queries[0][i],doc_ids[0],orignal_answer[0][i])
         '''Executes a training loop of the RAGPipeline
 
         Parameters:
@@ -56,117 +61,122 @@ class RAGPipeline:
         original_query
             The original query to generate responses for
         '''
-        dpo_dataset_dict = {}
-        count = tqdm(total=self.m*len(original_queries[0])*len(original_queries), desc='RAG Iterations', position=0)
-        f = open("output/all_variables_epoch_" + str(epoch) + ".txt","x")
-        for i, doc_id in enumerate(doc_ids):
-            for original_query in original_queries[i]:
-                qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
-                aug_queries = []
-                all_documents = []
-                top_documents = []
-                all_responses = []
-                all_rewards = np.zeros((self.m, self.l), dtype=float)
-                contributing_documents = []
-                first_pps = []
+        # dpo_dataset_dict = {}
+        # print("len(original_queries[0]):",len(original_queries[0]))
+        # print("len(original_queries):",len(original_queries))
+        # print("self.m:",self.m)
+        # count = tqdm(total=self.m*len(original_queries[0])*len(original_queries), desc='RAG Iterations', position=0)
+        # f = open("output/all_variables_epoch_" + str(epoch) + ".txt","x")
+        # for i, doc_id in enumerate(doc_ids):
+        #     for original_query in original_queries[i]:
+        #         qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
+        #         aug_queries = []
+        #         all_documents = []
+        #         top_documents = []
+        #         all_responses = []
+        #         all_rewards = np.zeros((self.m, self.l), dtype=float)
+        #         contributing_documents = []
+        #         first_pps = []
 
-                for i in range(self.m):
-                    queries = self.get_augmented_queries(qa_prompt, original_query)
-                    top_k_docs, all_docs = self.document_retrieval_model.forward(queries, [doc_id], self.p, self.k)
+        #         for i in range(self.m):
+        #             queries = self.get_augmented_queries(qa_prompt, original_query)
+        #             top_k_docs, all_docs = self.document_retrieval_model.forward(queries, [doc_id], self.p, self.k)
                     
-                    knowledge_base = []
-                    ctr = 0
-                    for doc in top_k_docs:
-                        knowledge_base.append(f"Source {ctr+1}: {doc}")
-                        ctr+=1
+        #             knowledge_base = []
+        #             ctr = 0
+        #             for doc in top_k_docs:
+        #                 knowledge_base.append(f"Source {ctr+1}: {doc}")
+        #                 ctr+=1
                     
-                    if self.training_mode == TrainingMode().ResponseWithCitation:
-                        rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-                    else:
-                        rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-                    responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
-                    rewards = [self.get_rewards(original_query, response) for response in responses]
-                    try:
-                        f = open("output/response_rewards.txt","a")                    
-                    except:
-                        f = open("output/response_rewards.txt","w")
-                    f.write("responses: ")
-                    f.write(str(responses))
-                    f.write("rewards: ")
-                    f.write(str(rewards))
-                    f.close()
+        #             if self.training_mode == TrainingMode().ResponseWithCitation:
+        #                 rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+        #             else:
+        #                 rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+        #             responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
+        #             print(responses)
+        #             rewards = [self.get_rewards(original_query, response) for response in responses]
+        #             print(rewards)
+        #             try:
+        #                 f = open("output/response_rewards.txt","a",encoding="utf-8")                    
+        #             except:
+        #                 f = open("output/response_rewards.txt","w",encoding="utf-8")
+        #             f.write("responses: ")
+        #             f.write(str(responses))
+        #             f.write("rewards: ")
+        #             f.write(str(rewards))
+        #             f.close()
 
-                    pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
+        #             pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
                     
 
 
-                    first_pps.append(pp1)
-                    aug_queries.append(queries)
-                    all_documents.append(all_docs)           
-                    top_documents.append(top_k_docs)
-                    all_responses.append(responses)
-                    all_rewards[i] = rewards
-                    contributing_documents.append(contri_docs)
-                    count.update(1)
-                print("outside")
-                all_responses=np.array(all_responses)
-                pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
+        #             first_pps.append(pp1)
+        #             aug_queries.append(queries)
+        #             all_documents.append(all_docs)           
+        #             top_documents.append(top_k_docs)
+        #             all_responses.append(responses)
+        #             all_rewards[i] = rewards
+        #             contributing_documents.append(contri_docs)
+        #             count.update(1)
+        #         print("outside")
+        #         all_responses=np.array(all_responses)
+        #         pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
 
-                # print(">>"*100)
-                # print("aug_queries: ")            
-                # print(str(self.find_list_dimensions(aug_queries)))        
-                # print("all_documents: ")
-                # print(str(self.find_list_dimensions(all_documents)))
-                # print("top_documents: ")
-                # print(str(self.find_list_dimensions(top_documents)))
-                # print("all_responses: ")
-                # print(str(all_responses.shape))
-                # print("all_rewards: ")
-                # print(str(all_rewards.shape))
-                # print("contributing_documents: ")
-                # print(str(self.find_list_dimensions(contributing_documents)))
-                # print("first_pps: ")
-                # print(str(self.find_list_dimensions(first_pps)))
-                # print("second_pps: ")
-                # print(len(pp2))
-                # print(">>"*100)
+        #         # print(">>"*100)
+        #         # print("aug_queries: ")            
+        #         # print(str(self.find_list_dimensions(aug_queries)))        
+        #         # print("all_documents: ")
+        #         # print(str(self.find_list_dimensions(all_documents)))
+        #         # print("top_documents: ")
+        #         # print(str(self.find_list_dimensions(top_documents)))
+        #         # print("all_responses: ")
+        #         # print(str(all_responses.shape))
+        #         # print("all_rewards: ")
+        #         # print(str(all_rewards.shape))
+        #         # print("contributing_documents: ")
+        #         # print(str(self.find_list_dimensions(contributing_documents)))
+        #         # print("first_pps: ")
+        #         # print(str(self.find_list_dimensions(first_pps)))
+        #         # print("second_pps: ")
+        #         # print(len(pp2))
+        #         # print(">>"*100)
 
-                with open("output/all_variables_epoch_" + str(epoch) + ".txt","a") as f:
-                    f.write("original_query: ")
-                    f.write(str(original_query))
-                    f.write(">>"*100)
-                    f.write("aug_queries: ")
-                    f.write(str(aug_queries))
-                    f.write(">>"*100)
-                    f.write("all_documents: ")
-                    f.write(str(all_documents))
-                    f.write(">>"*100)
-                    f.write("top_documents: ")
-                    f.write(str(top_documents))
-                    f.write(">>"*100)
-                    f.write("all_responses: ")
-                    f.write(str(all_responses))
-                    f.write(">>"*100)
-                    f.write("all_rewards: ")
-                    f.write(str(all_rewards))
-                    f.write(">>"*100)
-                    f.write("contributing_documents: ")
-                    f.write(str(contributing_documents))
-                    f.write(">>"*100)
-                    f.write("first_pps: ")
-                    f.write(str(first_pps))
-                    f.write(">>"*100)
-                    f.write("second pp")
-                    f.write(str(pp2))
-                    f.write(">>"*100)
+        #         with open("output/all_variables_epoch_" + str(epoch) + ".txt","a",encoding="utf-8") as f:
+        #             f.write("original_query: ")
+        #             f.write(str(original_query))
+        #             f.write(">>"*100)
+        #             f.write("aug_queries: ")
+        #             f.write(str(aug_queries))
+        #             f.write(">>"*100)
+        #             f.write("all_documents: ")
+        #             f.write(str(all_documents))
+        #             f.write(">>"*100)
+        #             f.write("top_documents: ")
+        #             f.write(str(top_documents))
+        #             f.write(">>"*100)
+        #             f.write("all_responses: ")
+        #             f.write(str(all_responses))
+        #             f.write(">>"*100)
+        #             f.write("all_rewards: ")
+        #             f.write(str(all_rewards))
+        #             f.write(">>"*100)
+        #             f.write("contributing_documents: ")
+        #             f.write(str(contributing_documents))
+        #             f.write(">>"*100)
+        #             f.write("first_pps: ")
+        #             f.write(str(first_pps))
+        #             f.write(">>"*100)
+        #             f.write("second pp")
+        #             f.write(str(pp2))
+        #             f.write(">>"*100)
                 
-                dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
-        print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
+        #         dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
+        # print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
 
-        # torch.cuda.set_device(0)  # Assuming you want to use the first GPU
+        # # torch.cuda.set_device(0)  # Assuming you want to use the first GPU
 
-        # Train the model on that GPU
-        self.language_model.train(epoch, dpo_dataset_dict)
+        # # Train the model on that GPU
+        # self.language_model.train(epoch, dpo_dataset_dict)
     def compute_scores(self,references, candidates):
         """
         Compute multiple scores (BLEU, ROUGE, METEOR, etc.) given references and candidate translations.
@@ -181,15 +191,15 @@ class RAGPipeline:
         scores = {}
 
         # Load and compute BLEU score
-        bleu_metric = load("bleu")
+        bleu_metric = evaluate.load("bleu")
         scores['BLEU'] = bleu_metric.compute(predictions=candidates, references=references)
 
         # Load and compute ROUGE score
-        rouge_metric = load_metric("rouge")
+        rouge_metric = evaluate.load("rouge")
         scores['ROUGE'] = rouge_metric.compute(predictions=candidates, references=references)
 
         # Load and compute METEOR score
-        meteor_metric = load_metric("meteor")
+        meteor_metric = evaluate.load("meteor")
         scores['METEOR'] = meteor_metric.compute(predictions=candidates, references=references)
 
         # You can add more metrics here in a similar fashion
@@ -198,20 +208,48 @@ class RAGPipeline:
 
 
     def prediction(self,query,doc_ids,real_ans):
-        # print(doc_ids)
-        queries=[]
-        queries.append(query)        
-        top_k_docs, all_docs = self.document_retrieval_model.forward(queries, doc_ids, self.p, self.k) 
-        top_k_docs=top_k_docs[0]  
-        rag_prompt = RAG_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(top_k_docs))
-        responses=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
-        q=[responses]
+        print(doc_ids)
+        print("The orignal query is")
+        print(query)
+        print("The orignal response is")
+        print(real_ans)
+        # print(doc_ids)  
+        top_k_docs, all_docs = self.document_retrieval_model.forward([query], [doc_ids], self.p, self.k) 
+        # print(top_k_docs)
+        # top_k_docs=top_k_docs[0] 
+        # print("The RAG prompt is") 
+        # print(RAG_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(top_k_docs)))
+        knowledge_base = []
+        ctr = 0
+        for doc in top_k_docs:
+            knowledge_base.append(f"Source {ctr+1}: {doc}")
+            ctr+=1
+
+        rag_prompt = RAG_CITATION_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(knowledge_base))
+        responses=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT)
+        print("The model generated response is")
+        print(responses)
+
+        q=[responses,real_ans]
         z=[]
         l=[]
-        for i in top_k_docs:
-            l.append([i])
-        z.append(l)
-        rewards = [self.get_rewards(original_query, response) for response in responses]
+        rewards = [self.get_rewards(query, response) for response in q]
+        print("The rewards are")
+        print(rewards)
+        print("The scores are")
+        scores=self.compute_scores([real_ans],[responses])
+        print(scores)
+        file_exists = os.path.isfile('output.csv') and os.path.getsize('output.csv') > 0
+
+        with open('output.csv', 'a', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            # Write headers if the file is new/empty
+            if not file_exists:
+                writer.writerow(["Finetune_Model_Generated Response", "Finetune_Model_answer_reward", "Finetune_Model_Goldman_Answer_Reward", "Finetune_Model_Scores"])
+            # Write data
+            writer.writerow([responses, rewards[0], rewards[1], scores])
+
+
 
 
 
@@ -251,7 +289,7 @@ class RAGPipeline:
                 source_list = re.findall("source.*\d+", sources, flags=re.I)
                 contri_docs.append(source_list)
             elif self.training_mode == TrainingMode().SimiliarityScoreCitation:
-                answer=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
+                answer=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("<|end_of_turn|>")[1]
 
             responses.append(answer)
             
@@ -288,10 +326,14 @@ class RAGPipeline:
         do_retry = True
         reward=-1
         reward_prompt = REWARD_PROMPT.format(original_query = original_query, answer = response)
+        # print("The reward prompt is")
+        # print(reward_prompt)
         while j < max_tries and do_retry:
             
             j=j+1
             reward_response = self.language_model(reward_prompt)
+            # print("The reward response is \n",reward_response)
+
             
             match = re.search("Final Score: ([0-9]+) out of 5", reward_response)
             if not match:
