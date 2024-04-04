@@ -5,7 +5,9 @@ import time
 import pandas as pd
 from constants import *
 
-model_config = {
+model_config = { 
+  "NumberOfAugementedQueries":5,
+  "NumberOfRetrievedDocuments":8,
   "NumberOfTopkDocuments":5,
   "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.2', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.2', # 'unsloth/mistral-7b-bnb-4bit'
   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
@@ -34,10 +36,10 @@ execution_time = (end_time - start_time)/60
 print(f"Execution time: {execution_time} minutes")
 
 print("scores:", scores)
-df = pd.DataFrame({"prompts":prompts,
+df = pd.DataFrame({"prompt":prompts,
             "gold_answer":gold_answers,
-            "pred_answer":pred_answers,
-            "reward":rewards,
-            "gold_rewards":gold_rewards,
+            "baseline_answer":pred_answers,
+            "baseline_answer_model_reward":rewards,
+            "gold_answer_model_reward":gold_rewards,
             "contri_docs": contri_docs})           
 df.to_csv(OUTPUT_DIRECTORY + "mistral_baseline_aug_results.csv")
