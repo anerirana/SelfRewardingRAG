@@ -1,100 +1,394 @@
+import numpy as np
+from datasets import load_metric
+import os
+from llm import LLM
+from sentence_transformers import SentenceTransformer, util
+from document_retriver import DocumentRetrievalModel 
+from constants import *
+from preference_pair_generator import PreferencePairGenerator
+from document_retriver import DocumentRetrievalModel 
+from constants import *
+import re
+from tqdm import tqdm
+from datasets import load_metric as load
+import evaluate
+import csv
 
-import torch
-import torch.nn as nn
-from transformers import AutoTokenizer,AutoModelForCausalLM, TrainingArguments
-from trl import DPOTrainer
-from unsloth import FastLanguageModel, PatchDPOTrainer,unsloth_save_model
-from datasets import Dataset
+# Utilities
+def exists(val):
+    return val is not None
 
-class LLM(nn.Module):
-    def __init__(self, model_name):
-        super(LLM, self).__init__()
-        '''Retrival Augmented Generation model to generate responses for a given query 
-        and a set of retieved documents
-        '''
-        # self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        # self.model = AutoModelForCausalLM.from_pretrained(model_name,
-        #             trust_remote_code=True,
-        #             device_map="auto")                        
-        # self.model = torch.compile(self.model, mode = "max-autotune", backend="inductor")
+def default(val, default_value):
+    return val if exists(val) else default_value
 
-        max_seq_length = 4096 # Choose any! We auto support RoPE Scaling internally!
-        dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
-        load_in_4bit = True # Use 4bit quantization to reduce memory usage. Can be False.
-        model, self.tokenizer = FastLanguageModel.from_pretrained(
-                model_name = 'Nexusflow/Starling-LM-7B-beta',
-                max_seq_length = max_seq_length,
-                dtype = None,
-                load_in_4bit = True,
-            )
+class TrainingMode:
+  def __init__(self):
+    self.SimiliarityScoreCitation = "similiarity_score_citation"  
+    self.ResponseWithCitation = "response_with_citation"
+    self.IsolatedCitation = "isolated_citation"
 
-        # Do model patching and add fast LoRA weights
-        self.model = FastLanguageModel.get_peft_model(
-            model,
-            r = 64, # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
-            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
-                            "gate_proj", "up_proj", "down_proj",],
-            lora_alpha = 64,
-            lora_dropout = 0, # Currently only supports dropout = 0
-            bias = "none",    # Currently only supports bias = "none"
-            use_gradient_checkpointing = True,
-            random_state = 3407,
-            use_rslora = False,  # We support rank stabilized LoRA
-            loftq_config = None, # And LoftQ
-        )
-    
-    def forward(self, prompt, param_dict=None):
-        '''Generate response for the given prompt
+class RAGPipeline:
+    def __init__(self, config: dict):
+        '''Executes each block of RAGPipeline to train query augmentation and RAG models
 
         Parameters:
         -----------
-        prompt
-            The prompt used as input to the generative model.
-            Could be a RAG or QA or reward prompt.
+        num_documents
+            Numnber of docuemts to retrieve per query by the Document Retrieval Model 
         '''
-        messages = [{"role":"user", "content":prompt}]
-        encoded = self.tokenizer.apply_chat_template(messages, return_tensors="pt")
-        inputs = encoded.to(self.model.device) 
-        # max_length = max(self.max_seq_length, input_ids.shape[1]+1)    
+        self.p = default(config.get('NumberOfRetrievedDocuments'), 5)
+        self.m = default(config.get('NumberOfQuerySets'), 5)
+        self.n = default(config.get('NumberOfAugementedQueries'), 5)
+        self.l = default(config.get('NumberOfResponses'), 5)
+        self.k = default(config.get('NumberOfTopkDocuments'), 5)
+        self.language_model = LLM(default(config.get('LanguageModelName'), 'mistralai/Mistral-7B-Instruct-v0.1'))
+        self.citation_model = SentenceTransformer(default(config.get('CitationModelName'), 'sentence-transformers/all-mpnet-base-v2'))
+        self.training_mode = default(config.get('TrainingMode'), TrainingMode().SimiliarityScoreCitation)
+
+        self.document_retrieval_model = DocumentRetrievalModel()   
+        self.pp_generator = PreferencePairGenerator(self.language_model)
+
+
+    #TODO: Implement prediction to get RAG responses and their rewards after training
+
+    def train(self, original_queries, epoch,orignal_answer, doc_ids=None):
+        # for i in range(0,len(original_queries[0])):
+        #     self.prediction(original_queries[0][i],doc_ids[0],orignal_answer[0][i])
+        '''Executes a training loop of the RAGPipeline
+
+        Parameters:
+        -----------
+        original_query
+            The original query to generate responses for
+        '''
+        dpo_dataset_dict = {}
+        count = tqdm(total=self.m*len(original_queries[0])*len(original_queries), desc='RAG Iterations', position=0)
+        f = open("output/all_variables_epoch_" + str(epoch) + ".txt","x")
+        for i, doc_id in enumerate(doc_ids):
+            for original_query in original_queries[i]:
+                qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
+                aug_queries = []
+                all_documents = []
+                top_documents = []
+                all_responses = []
+                all_rewards = np.zeros((self.m, self.l), dtype=float)
+                contributing_documents = []
+                first_pps = []
+
+                for i in range(self.m):
+                    queries = self.get_augmented_queries(qa_prompt, original_query)
+                    top_k_docs, all_docs = self.document_retrieval_model.forward(queries, [doc_id], self.p, self.k)
+                    
+                    knowledge_base = []
+                    ctr = 0
+                    for doc in top_k_docs:
+                        knowledge_base.append(f"Source {ctr+1}: {doc}")
+                        ctr+=1
+                    
+                    if self.training_mode == TrainingMode().ResponseWithCitation:
+                        rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+                    else:
+                        rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+                    responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
+                    rewards = [self.get_rewards(original_query, response) for response in responses]
+                    try:
+                        f = open("output/response_rewards.txt","a",encoding="utf-8")                    
+                    except:
+                        f = open("output/response_rewards.txt","w",encoding="utf-8")
+                    f.write("responses: ")
+                    f.write(str(responses))
+                    f.write("rewards: ")
+                    f.write(str(rewards))
+                    f.close()
+
+                    pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
+                    
+
+
+                    first_pps.append(pp1)
+                    aug_queries.append(queries)
+                    all_documents.append(all_docs)           
+                    top_documents.append(top_k_docs)
+                    all_responses.append(responses)
+                    all_rewards[i] = rewards
+                    contributing_documents.append(contri_docs)
+                    count.update(1)
+                all_responses=np.array(all_responses)
+                pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
+
+        #         # print(">>"*100)
+        #         # print("aug_queries: ")            
+        #         # print(str(self.find_list_dimensions(aug_queries)))        
+        #         # print("all_documents: ")
+        #         # print(str(self.find_list_dimensions(all_documents)))
+        #         # print("top_documents: ")
+        #         # print(str(self.find_list_dimensions(top_documents)))
+        #         # print("all_responses: ")
+        #         # print(str(all_responses.shape))
+        #         # print("all_rewards: ")
+        #         # print(str(all_rewards.shape))
+        #         # print("contributing_documents: ")
+        #         # print(str(self.find_list_dimensions(contributing_documents)))
+        #         # print("first_pps: ")
+        #         # print(str(self.find_list_dimensions(first_pps)))
+        #         # print("second_pps: ")
+        #         # print(len(pp2))
+        #         # print(">>"*100)
+
+                with open("output/all_variables_epoch_" + str(epoch) + ".txt","a",encoding="utf-8") as f:
+                    f.write("original_query: ")
+                    f.write(str(original_query))
+                    f.write(">>"*100)
+                    f.write("aug_queries: ")
+                    f.write(str(aug_queries))
+                    f.write(">>"*100)
+                    f.write("all_documents: ")
+                    f.write(str(all_documents))
+                    f.write(">>"*100)
+                    f.write("top_documents: ")
+                    f.write(str(top_documents))
+                    f.write(">>"*100)
+                    f.write("all_responses: ")
+                    f.write(str(all_responses))
+                    f.write(">>"*100)
+                    f.write("all_rewards: ")
+                    f.write(str(all_rewards))
+                    f.write(">>"*100)
+                    f.write("contributing_documents: ")
+                    f.write(str(contributing_documents))
+                    f.write(">>"*100)
+                    f.write("first_pps: ")
+                    f.write(str(first_pps))
+                    f.write(">>"*100)
+                    f.write("second pp")
+                    f.write(str(pp2))
+                    f.write(">>"*100)
+                
+                dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
+        print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
+
+        # torch.cuda.set_device(0)  # Assuming you want to use the first GPU
+
+        # Train the model on that GPU
+        self.language_model.train(epoch, dpo_dataset_dict)
+    def compute_scores(self,references, candidates):
+        """
+        Compute multiple scores (BLEU, ROUGE, METEOR, etc.) given references and candidate translations.
+
+        Args:
+            references (list of list of str): A list of lists, each inner list contains reference translations for one sentence.
+            candidates (list of str): A list of candidate translations.
+
+        Returns:
+            dict: Dictionary of scores including BLEU, ROUGE, METEOR, etc.
+        """
+        scores = {}
+
+        # Load and compute BLEU score
+        bleu_metric = evaluate.load("bleu")
+        scores['BLEU'] = bleu_metric.compute(predictions=candidates, references=references)
+
+        # Load and compute ROUGE score
+        rouge_metric = evaluate.load("rouge")
+        scores['ROUGE'] = rouge_metric.compute(predictions=candidates, references=references)
+
+        # Load and compute METEOR score
+        meteor_metric = evaluate.load("meteor")
+        scores['METEOR'] = meteor_metric.compute(predictions=candidates, references=references)
+
+        # You can add more metrics here in a similar fashion
+
+        return scores
+
+
+    def prediction(self,query,doc_ids,real_ans):
+        top_k_docs, all_docs = self.document_retrieval_model.forward([query], [doc_ids], self.p, self.k) 
+        knowledge_base = []
+        ctr = 0
+        for doc in top_k_docs:
+            knowledge_base.append(f"Source {ctr+1}: {doc}")
+            ctr+=1
+
+        rag_prompt = RAG_CITATION_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(knowledge_base))
+        responses=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT)
+        q=[responses,real_ans]
+        z=[]
+        l=[]
+        rewards = [self.get_rewards(query, response) for response in q]
+        scores=self.compute_scores([real_ans],[responses])
+        file_exists = os.path.isfile('output.csv') and os.path.getsize('output.csv') > 0
+
+        with open('output.csv', 'a', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            # Write headers if the file is new/empty
+            if not file_exists:
+                writer.writerow(["Finetune_Model_Generated Response", "Finetune_Model_answer_reward", "Finetune_Model_Goldman_Answer_Reward", "Finetune_Model_Scores"])
+            # Write data
+            writer.writerow([responses, rewards[0], rewards[1], scores])
+
+
+
+
+
+    def dpo_parsing(self,first_pps,pp2):
+        dataset_dict={"prompt": [],"chosen": [], "rejected": []}
+        for i in range(0,len(first_pps)):
+            dataset_dict["prompt"].append(first_pps[i][0])
+            dataset_dict["chosen"].append(first_pps[i][1])
+            dataset_dict["rejected"].append(first_pps[i][2])
         
-        if param_dict is None:
-            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.3, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+        for i in range(0,len(pp2)):
+            dataset_dict["prompt"].append(pp2[i][0])
+            dataset_dict["chosen"].append(pp2[i][1])
+            dataset_dict["rejected"].append(pp2[i][2])
+        
+        return dataset_dict
+    
+    def find_list_dimensions(self,lst):
+        if not isinstance(lst, list) or not lst:  # Base case: not a list or empty list
+            return []
+        return [len(lst)] + self.find_list_dimensions(lst[0])
+          
+    def get_query_responses(self, rag_prompt, original_query, top_k_docs, i):
+        
+        responses = []
+        contri_docs = []
+ 
+        
+        for i in range(self.l):         
+            if self.training_mode == TrainingMode().ResponseWithCitation:
+                answer=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
+                try:
+                    answer, sources = re.split("sources?\s?used", answer, flags=re.IGNORECASE)
+                except ValueError as e:
+                    print("Response does not have correct sources format")
+                    #TODO: Fall back to sentence similarity using llm's answer
+                source_list = re.findall("source.*\d+", sources, flags=re.I)
+                contri_docs.append(source_list)
+            elif self.training_mode == TrainingMode().SimiliarityScoreCitation:
+                answer=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("<|end_of_turn|>")[1]
+
+            responses.append(answer)
+        
+        # contri_docs = top_k_docs*self.l
+        if self.training_mode == TrainingMode().SimiliarityScoreCitation:
+            contri_docs = self.get_cited_documents(responses, original_query, top_k_docs)
+
+        return responses, contri_docs   
+
+    def get_cited_documents(self, responses, original_query, top_k_docs):
+        cited_documents = []
+        docs_embedding = [self.citation_model.encode(doc, convert_to_tensor=True) for doc in top_k_docs] 
+        for response in responses:
+            response_embedding = self.citation_model.encode(response, convert_to_tensor=True)
+            scores = np.array([util.pytorch_cos_sim(response_embedding, doc_embedding).tolist()[0][0] for doc_embedding in docs_embedding])
+            
+            doc_indx = np.where(scores > 0.5)[0]
+            cited_documents.append(np.array(top_k_docs)[doc_indx])
+                
+            
+        
+        # for i in range(self.l):
+        #     prompt = EXTRACT_CITATION_PROMPT.format(original_query=original_query, extracts=top_k_docs, answer=responses[i])
+        #     self.language_model(prompt)
+        # return
+        return cited_documents
+
+    def get_rewards(self, original_query, response):
+        max_tries = 5
+        j = 0
+        do_retry = True
+        reward=-1
+        reward_prompt = REWARD_PROMPT.format(original_query = original_query, answer = response)
+        while j < max_tries and do_retry:
+            j=j+1
+            reward_response = self.language_model(reward_prompt)
+            match = re.search("Final Score: ([0-9]+) out of 5", reward_response)
+            if not match:
+                match =  re.search("Total score = ([0-9]+) out of 5", reward_response)
+            if not match:
+                match =  re.search("Score: ([0-9]+) out of 5", reward_response)
+            if match:
+                reward = match.group(1)  
+                do_retry = False
+        
+        if do_retry:
+            try:
+                with open("output/reward_error.txt","a") as f:
+                    f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
+                    # raise Exception("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
+            except:
+                with open("output/reward_error.txt","w") as f:
+                    f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
+                    
+        
+        return reward
+    
+    def get_augmented_queries(self, qa_prompt, original_query):
+        '''
+        Extracts query samples from the language model
+        '''
+
+        max_tries = 5
+        response = ""
+        j = 0
+        sanity_check = False
+
+        while j < max_tries and sanity_check == False:
+            j += 1
+            response = self.language_model(qa_prompt, SAMPLING_PARAMS_DICT)
+            sanity_check = True
+            for i in range(1, self.n+1):
+                if f"{i}." not in response:
+                    sanity_check = False
+                    break
+        
+        response = response.split(qa_prompt)[-1] #Remove the prompt from the response       
+        response = re.sub(r'<s>|</s>|<pad>|[\[|\"|\'|\/]+INST\]', '', response) #Remove special tokens
+        queries = []
+        for i in range(1, self.n):
+            pattern = "Version " + str(i)
+            match = re.search(pattern + r"\.(.*\?)",response)
+            if not match:
+                match = re.search(str(i)+r"\.(.*\?)",response)
+            if not match and i == self.n - 1:
+                match = re.search(str(i)+r"\.(.*)",response)
+            if not match:
+                try:
+                    f = open("output/query_aug_error.txt","a")
+                except:
+                    f = open("output/query_aug_error.txt","w")
+                f.write(f"Query version {i} not found in response:")
+                f.write(str(response))
+                f.close()
+                break
+            else:
+                queries.append(match.group(1))
+        
+        # for i in range(1, self.n+1):
+        #     queries = re.sub(f"Version {i}.", "", queries)
+        #     queries = re.sub(f"{i}.", "", queries)
+        
+        # queries = re.sub(r'Here are three possible variations on your initial query:', '', queries)
+        # queries = re.sub(r'Here are three possible variations on your request for information:', '', queries)
+        
+        # queries = queries.strip()
+        # queries = re.split(r"\n{1,2}", queries) #Split the response into a list of queries
+        
+        queries = [q.strip() for q in queries]
+        # queries = [q for q in queries if q != '']
+        queries.append(original_query)
+        if len(queries) < self.n:
+            queries.extend(random.choices(queries, k=self.n-len(queries)))
         else:
-            print("HIIIIII")
-            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
-        
-        return self.tokenizer.decode(outputs[0])
+            queries = queries[:self.n]
+        return queries
 
-    def train(self, epoch, training_dataset, batch_size=32, num_epochs=3):
-        dataset = Dataset.from_dict(training_dataset)
 
-        PatchDPOTrainer()
-        dpo_trainer = DPOTrainer(
-            model = self.model,
-            ref_model = None,
-            args = TrainingArguments(
-                per_device_train_batch_size = 2,
-                gradient_accumulation_steps = 4,
-                warmup_ratio = 0.1,
-                num_train_epochs = 3,
-                learning_rate = 5e-6,
-                fp16 = not torch.cuda.is_bf16_supported(),
-                bf16 = torch.cuda.is_bf16_supported(),
-                logging_steps = 1,
-                optim = "adamw_8bit",
-                weight_decay = 0.0,
-                lr_scheduler_type = "linear",
-                seed = 42,
-                output_dir = "output/training_arguments",
-            ),
-            beta = 0.1,
-            train_dataset = dataset,
-            # eval_dataset = raw_datasets["test"],
-            tokenizer = self.tokenizer,
-            max_length = 1024,
-            max_prompt_length = 512,
-        )
-        print(">>"*40 + " BEGINING TRAINING " + ">>"*40)
-        dpo_trainer.train()
-        unsloth_save_model(self.model, self.tokenizer, "output/model_epoch_" + str(epoch), push_to_hub=False, token=None)
-        print(">>"*40 + " END TRAINING " + ">>"*40)
+
+
+
+
+
+
+
