@@ -5,6 +5,7 @@ from transformers import AutoTokenizer,AutoModelForCausalLM, TrainingArguments
 from trl import DPOTrainer
 from unsloth import FastLanguageModel, PatchDPOTrainer,unsloth_save_model
 from datasets import Dataset
+from constants import *
 
 class LLM(nn.Module):
     def __init__(self, model_name):
@@ -83,7 +84,7 @@ class LLM(nn.Module):
                 weight_decay = 0.0,
                 lr_scheduler_type = "linear",
                 seed = 42,
-                output_dir = "output/training_arguments",
+                output_dir = OUTPUT_DIRECTORY + "training_arguments",
             ),
             beta = 0.1,
             train_dataset = dataset,
@@ -94,6 +95,6 @@ class LLM(nn.Module):
         )
         print(">>"*40 + " BEGINING TRAINING " + ">>"*40)
         dpo_trainer.train()
-        unsloth_save_model(self.model, self.tokenizer, "output/model_epoch_" + str(epoch), push_to_hub=False, token=None)
+        unsloth_save_model(self.model, self.tokenizer, OUTPUT_DIRECTORY + "model_epoch_" + str(epoch), push_to_hub=False, token=None)
         print(">>"*40 + " END TRAINING " + ">>"*40)
 
