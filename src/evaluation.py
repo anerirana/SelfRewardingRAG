@@ -26,7 +26,7 @@ for doc_id in doc_ids:
         original_queries.append(q_row)
 
 start_time = time.time()
-prompts, pred_answers, rewards, gold_rewards = rag_pipeline.generate_answer(original_queries,doc_ids,gold_answers)
+prompts, pred_answers, rewards, gold_rewards,contri_docs = rag_pipeline.generate_answer(original_queries,doc_ids,gold_answers)
 print("="*30 + " Computing Scores " "="*30)
 scores = rag_pipeline.compute_scores(gold_answers, pred_answers)
 end_time = time.time()
@@ -40,4 +40,4 @@ df = pd.DataFrame({"prompts":prompts,
             "reward":rewards,
             "gold_rewards":gold_rewards,
             "contri_docs": contri_docs})           
-df.to_csv(OUTPUT_DIRECTORY + "mistral_baseline_aug_results_2.csv")
+df.to_csv(OUTPUT_DIRECTORY + "mistral_baseline_aug_results.csv")
