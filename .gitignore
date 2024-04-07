@@ -58,6 +58,7 @@ credit_agreements_val/
 testing.py
 data/
 output/
+output_mistral_ft/
 ragatouille/
 training_dataset/
 wandb/
