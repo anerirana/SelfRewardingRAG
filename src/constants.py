@@ -1,5 +1,5 @@
 import random
-
+OUTPUT_DIRECTORY = "/home/arana_umass_edu/SelfRewardingRAG/output/"
 QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {original_query}. 
 
 - Each version of the query should be distinct and relevant to the original query.
