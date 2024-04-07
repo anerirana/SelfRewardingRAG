@@ -3,14 +3,14 @@ from os import listdir
 import jsonlines
 import time
 
-NUM_TRAIN_EPOCHS = 3
+NUM_TRAIN_EPOCHS = 5
 model_config = {
-  "NumberOfRetrievedDocuments":5,
+  "NumberOfRetrievedDocuments":8,
   "NumberOfQuerySets":5,
   "NumberOfAugementedQueries":5,
   "NumberOfResponses":5,
   "NumberOfTopkDocuments":5,
-  "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
+  "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.1', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
   "TrainingMode":TrainingMode().SimiliarityScoreCitation
 }
@@ -29,6 +29,8 @@ for doc_id in doc_ids:
 # original_query = "What is the maximum aggregate principal amount of the commitments provided under this credit agreement?"
 # doc_ids = ["4c2ec99f83bc81396ff37d5e7abf9880b713a61fc0d6c7b5e1fce184653e226b"]
 
+# original_queries = [[original_queries[0][0]]]
+# doc_ids = [doc_ids[0]]
 for epoch in range(NUM_TRAIN_EPOCHS):
     start_time = time.time()
     print("=="*20 + " EPOCH " + str(epoch) + "=="*20)
