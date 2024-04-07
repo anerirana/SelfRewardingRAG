@@ -28,7 +28,10 @@ for doc_id in doc_ids:
         original_queries.append(q_row)
 
 start_time = time.time()
-prompts, pred_answers, rewards, gold_rewards,contri_docs = rag_pipeline.generate_answer(original_queries,doc_ids,gold_answers)
+# prompts, pred_answers, rewards, gold_rewards,contri_docs = rag_pipeline.generate_answer(original_queries,doc_ids,gold_answers)
+
+original_queries = [query for queries in original_queries for query in queries]
+prompts, pred_answers, rewards, gold_rewards, contri_docs = rag_pipeline.generate_answer_with_augmentation(original_queries,doc_ids,gold_answers)
 print("="*30 + " Computing Scores " "="*30)
 scores = rag_pipeline.compute_scores(gold_answers, pred_answers)
 end_time = time.time()
@@ -36,7 +39,8 @@ execution_time = (end_time - start_time)/60
 print(f"Execution time: {execution_time} minutes")
 
 print("scores:", scores)
-df = pd.DataFrame({"prompt":prompts,
+df = pd.DataFrame({"original_query:", original_queries,
+            "prompt":prompts,
             "gold_answer":gold_answers,
             "baseline_answer":pred_answers,
             "baseline_answer_model_reward":rewards,

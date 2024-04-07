@@ -192,7 +192,7 @@ class RAGPipeline:
         return scores
 
 
-    def generate_answer(self,original_queries,doc_ids, gold_answers):      
+    def generate_answer_with_augmentation(self,original_queries,doc_ids, gold_answers):      
         print("="*30 + " Generating Answers " + "="*30)
         answers = []
         rewards = []
@@ -202,7 +202,6 @@ class RAGPipeline:
         contri_docs = []
 
         [doc_ids_flat.extend([doc_id]*len(original_queries[i])) for i,doc_id in enumerate(doc_ids)]
-        original_queries = [query for queries in original_queries for query in queries]
         
         count = tqdm(total=len(original_queries), desc='RAG Iterations', position=0)
         for original_query, doc_id, gold_answer in zip(original_queries, doc_ids_flat, gold_answers): 
@@ -212,6 +211,46 @@ class RAGPipeline:
             knowledge_base = []
             ctr = 0
             for doc in top_k_docs:
+                knowledge_base.append(f"Source {ctr+1}: {doc}")
+                ctr+=1
+            
+            rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+            answer=self.language_model(rag_prompt).split("[/INST]")[-1]
+            try:
+                answer, sources = re.split("sources?\s?used", answer, flags=re.IGNORECASE)
+                source_list = re.findall("source.*\d+", sources, flags=re.I)
+                contri_docs.append(source_list)
+            except ValueError as e:
+                contri_docs.append([])
+                print("Response does not have correct sources format") 
+            
+            reward = self.get_rewards(original_query, answer)
+            gold_reward = self.get_rewards(original_query, gold_answer)
+            prompts.append(rag_prompt)
+            answers.append(answer)
+            rewards.append(reward)
+            gold_rewards.append(gold_reward)
+            count.update(1)
+        
+        
+        return prompts, answers, rewards, gold_rewards, contri_docs
+
+    def generate_answer(self, original_queries, doc_ids, gold_answers):      
+        print("="*30 + " Generating Answers " + "="*30)
+        answers = []
+        rewards = []
+        gold_rewards = []
+        prompts = []
+        contri_docs = []
+
+        all_docs = self.document_retrieval_model.prediction(original_queries, doc_ids)
+        original_queries = [query for queries in original_queries for query in queries]
+        count = tqdm(total=len(original_queries), desc='RAG Iterations', position=0)
+        
+        for original_query, docs, gold_answer in zip(original_queries, all_docs, gold_answers):      
+            knowledge_base = []
+            ctr = 0
+            for doc in docs:
                 knowledge_base.append(f"Source {ctr+1}: {doc}")
                 ctr+=1
             
