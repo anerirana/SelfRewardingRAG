@@ -10,7 +10,7 @@ model_config = {
   "NumberOfAugementedQueries":5,
   "NumberOfResponses":5,
   "NumberOfTopkDocuments":5,
-  "LanguageModelName":"/home/arana_umass_edu/SelfRewardingRAG/output/model_epoch_1", # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
+  "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.1', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
   "TrainingMode":TrainingMode().SimiliarityScoreCitation
 }
@@ -31,7 +31,7 @@ for doc_id in doc_ids:
 
 # original_queries = [[original_queries[0][0]]]
 # doc_ids = [doc_ids[0]]
-for epoch in range(2,NUM_TRAIN_EPOCHS):
+for epoch in range(NUM_TRAIN_EPOCHS):
     start_time = time.time()
     print("=="*20 + " EPOCH " + str(epoch) + "=="*20)
     rag_pipeline.train(original_queries,epoch,doc_ids=doc_ids)
