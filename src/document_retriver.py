@@ -4,7 +4,7 @@ from functools import partial
 from collections import defaultdict
    
 class DocumentRetrievalModel:
-    def __init__(self, k, p, path_to_index = "/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_pilot_8"):
+    def __init__(self, k, p, path_to_index = "/scratch/workspace/arana_umass_edu-goldamn_project/400_docs_index"):
         # Initialize components specific to Document Retrieval
         self.path_to_index = path_to_index
         self.k = k
@@ -28,7 +28,7 @@ class DocumentRetrievalModel:
         # Placeholder implementation
         all_documents = []
         all_ranks = []
-        for query in aug_queries:   
+        for query in aug_queries: 
             result = self.RAG.search(query=query, k=self.p, doc_ids=[doc_id])
             row = []      
             for x in result:

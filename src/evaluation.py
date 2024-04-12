@@ -4,6 +4,7 @@ import jsonlines
 import time
 import pandas as pd
 from constants import *
+import pandas as pd
 
 model_config = { 
   "NumberOfAugementedQueries":5,
@@ -15,22 +16,16 @@ model_config = {
 }
 rag_pipeline = RAGPipeline(model_config)
 
-queries_dir = "/scratch/workspace/arana_umass_edu-goldamn_project/data/jsonls_eval/"
-doc_ids = [f.split('.')[0] for f in listdir(queries_dir)]
-original_queries = []
-gold_answers = []
-for doc_id in doc_ids:
-    q_row = []
-    with jsonlines.open(queries_dir + doc_id + ".jsonl") as f:
-        for line in f.iter():
-            q_row.append(line['question'])
-            gold_answers.append([line['answer']])
-        original_queries.append(q_row)
+dir_path = '/scratch/workspace/arana_umass_edu-goldamn_project/quality_analysis_gemini_subset/'
+dataset_file_name = 'DatasetQualityAnalysis_Abhiman-Data.csv'
+df = pd.read_csv(dir_path + dataset_file_name)
+
 
 start_time = time.time()
-# prompts, pred_answers, rewards, gold_rewards,contri_docs = rag_pipeline.generate_answer(original_queries,doc_ids,gold_answers)
+doc_ids = [doc_id.split('_response')[0] for doc_id in df['Document_ID']]
+gold_answers = df['Response']
+original_queries = df['Question']
 
-original_queries = [query for queries in original_queries for query in queries]
 prompts, pred_answers, rewards, gold_rewards, contri_docs = rag_pipeline.generate_answer_with_augmentation(original_queries,doc_ids,gold_answers)
 print("="*30 + " Computing Scores " "="*30)
 scores = rag_pipeline.compute_scores(gold_answers, pred_answers)
@@ -39,11 +34,11 @@ execution_time = (end_time - start_time)/60
 print(f"Execution time: {execution_time} minutes")
 
 print("scores:", scores)
-df = pd.DataFrame({"original_query:", original_queries,
-            "prompt":prompts,
-            "gold_answer":gold_answers,
-            "baseline_answer":pred_answers,
-            "baseline_answer_model_reward":rewards,
-            "gold_answer_model_reward":gold_rewards,
-            "contri_docs": contri_docs})           
-df.to_csv(OUTPUT_DIRECTORY + "mistral_baseline_aug_results.csv")
+df = pd.DataFrame({"original_query", original_queries,
+            "prompt",prompts,
+            "gold_answer", gold_answers,
+            "baseline_answer", pred_answers,
+            "baseline_answer_model_reward", rewards,
+            "gold_answer_model_reward", gold_rewards,
+            "contri_docs", contri_docs})           
+df.to_csv(OUTPUT_DIRECTORY + "mistral_baseline_gemini_subset_results.csv")

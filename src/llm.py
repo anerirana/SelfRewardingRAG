@@ -13,36 +13,36 @@ class LLM(nn.Module):
         '''Retrival Augmented Generation model to generate responses for a given query 
         and a set of retieved documents
         '''
-        # self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        # self.model = AutoModelForCausalLM.from_pretrained(model_name,
-        #             trust_remote_code=True,
-        #             device_map="auto")                        
-        # self.model = torch.compile(self.model, mode = "max-autotune", backend="inductor")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name,
+                    trust_remote_code=True,
+                    device_map="auto")                        
+        self.model = torch.compile(self.model, mode = "max-autotune", backend="inductor")
 
-        max_seq_length = 4096 # Choose any! We auto support RoPE Scaling internally!
-        dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
-        load_in_4bit = True # Use 4bit quantization to reduce memory usage. Can be False.
-        model, self.tokenizer = FastLanguageModel.from_pretrained(
-                model_name = model_name,
-                max_seq_length = max_seq_length,
-                dtype = None,
-                load_in_4bit = True,
-            )
+        # max_seq_length = 4096 # Choose any! We auto support RoPE Scaling internally!
+        # dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
+        # load_in_4bit = True # Use 4bit quantization to reduce memory usage. Can be False.
+        # model, self.tokenizer = FastLanguageModel.from_pretrained(
+        #         model_name = model_name,
+        #         max_seq_length = max_seq_length,
+        #         dtype = None,
+        #         load_in_4bit = True,
+        # )
 
         # Do model patching and add fast LoRA weights
-        self.model = FastLanguageModel.get_peft_model(
-            model,
-            r = 64, # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
-            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
-                            "gate_proj", "up_proj", "down_proj",],
-            lora_alpha = 64,
-            lora_dropout = 0, # Currently only supports dropout = 0
-            bias = "none",    # Currently only supports bias = "none"
-            use_gradient_checkpointing = True,
-            random_state = 3407,
-            use_rslora = False,  # We support rank stabilized LoRA
-            loftq_config = None, # And LoftQ
-        )
+        # self.model = FastLanguageModel.get_peft_model(
+        #     model,
+        #     r = 64, # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
+        #     target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
+        #                     "gate_proj", "up_proj", "down_proj",],
+        #     lora_alpha = 64,
+        #     lora_dropout = 0, # Currently only supports dropout = 0
+        #     bias = "none",    # Currently only supports bias = "none"
+        #     use_gradient_checkpointing = True,
+        #     random_state = 3407,
+        #     use_rslora = False,  # We support rank stabilized LoRA
+        #     loftq_config = None, # And LoftQ
+        # )
     
     def forward(self, prompt, param_dict=None):
         '''Generate response for the given prompt
