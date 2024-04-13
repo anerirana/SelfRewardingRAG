@@ -34,11 +34,10 @@ execution_time = (end_time - start_time)/60
 print(f"Execution time: {execution_time} minutes")
 
 print("scores:", scores)
-df = pd.DataFrame({"original_query", original_queries,
-            "prompt",prompts,
-            "gold_answer", gold_answers,
-            "baseline_answer", pred_answers,
-            "baseline_answer_model_reward", rewards,
-            "gold_answer_model_reward", gold_rewards,
-            "contri_docs", contri_docs})           
-df.to_csv(OUTPUT_DIRECTORY + "mistral_baseline_gemini_subset_results.csv")
+result_df = pd.DataFrame({"prompt":prompts,
+            "mistral_baseline_answer": pred_answers,
+            "mistral_baseline_answer_reward": rewards,
+            "mistral_baseline_gold_answer_reward": gold_rewards,
+            "mistral_baseline_contri_docs": contri_docs})  
+               
+pd.concat([df,result_df],axis=1) .to_csv(OUTPUT_DIRECTORY + "mistral_baseline_gemini_subset_results.csv")
