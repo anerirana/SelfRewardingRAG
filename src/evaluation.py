@@ -17,7 +17,7 @@ model_config = {
 rag_pipeline = RAGPipeline(model_config)
 
 dir_path = '/scratch/workspace/arana_umass_edu-goldamn_project/quality_analysis_gemini_subset/'
-dataset_file_name = 'DatasetQualityAnalysis_Abhiman-Data.csv'
+dataset_file_name = 'DatasetQualityAnalysis_Samevg-Data.csv'
 df = pd.read_csv(dir_path + dataset_file_name)
 
 
@@ -26,7 +26,7 @@ doc_ids = [doc_id.split('_response')[0] for doc_id in df['Document_ID']]
 gold_answers = df['Response']
 original_queries = df['Question']
 
-prompts, pred_answers, rewards, gold_rewards, contri_docs = rag_pipeline.generate_answer_with_augmentation(original_queries,doc_ids,gold_answers)
+prompts, pred_answers, rewards, gold_rewards,contri_docs = rag_pipeline.generate_answer(original_queries,doc_ids,gold_answers)
 print("="*30 + " Computing Scores " "="*30)
 scores = rag_pipeline.compute_scores(gold_answers, pred_answers)
 end_time = time.time()
@@ -40,4 +40,4 @@ result_df = pd.DataFrame({"prompt":prompts,
             "mistral_baseline_gold_answer_reward": gold_rewards,
             "mistral_baseline_contri_docs": contri_docs})  
                
-pd.concat([df,result_df],axis=1) .to_csv(OUTPUT_DIRECTORY + "mistral_baseline_gemini_subset_results.csv")
+pd.concat([df,result_df],axis=1) .to_csv(OUTPUT_DIRECTORY + "mistral_baseline_gemini_subset_results_SS.csv")

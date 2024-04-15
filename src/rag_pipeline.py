@@ -198,13 +198,13 @@ class RAGPipeline:
         rewards = []
         gold_rewards = []
         prompts = []
-        doc_ids_flat = []
+        # doc_ids_flat = []
         contri_docs = []
 
-        [doc_ids_flat.extend([doc_id]*len(original_queries[i])) for i,doc_id in enumerate(doc_ids)]
+        # [doc_ids_flat.extend([doc_id]*len(original_queries[i])) for i,doc_id in enumerate(doc_ids)]
         
         count = tqdm(total=len(original_queries), desc='RAG Iterations', position=0)
-        for original_query, doc_id, gold_answer in zip(original_queries, doc_ids_flat, gold_answers): 
+        for original_query, doc_id, gold_answer in zip(original_queries, doc_ids, gold_answers): 
             qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
             aug_queries = self.get_augmented_queries(qa_prompt, original_query)
             top_k_docs, _ = self.document_retrieval_model.train(aug_queries, doc_id)
@@ -244,7 +244,7 @@ class RAGPipeline:
         contri_docs = []
 
         all_docs = self.document_retrieval_model.prediction(original_queries, doc_ids)
-        original_queries = [query for queries in original_queries for query in queries]
+        # original_queries = [query for queries in original_queries for query in queries]
         count = tqdm(total=len(original_queries), desc='RAG Iterations', position=0)
         
         for original_query, docs, gold_answer in zip(original_queries, all_docs, gold_answers):      

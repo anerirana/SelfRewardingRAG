@@ -13,13 +13,14 @@ class DocumentRetrievalModel:
 
     def prediction(self, queries, doc_ids):
         all_documents = []
-        for i, doc_id in enumerate(doc_ids):
-            for query in queries[i]:
-                result = self.RAG.search(query=query, k=self.k, doc_ids=[doc_id]) 
-                row = []
-                for x in result:
-                    row.append(x['content'])            
-                all_documents.append(row)
+        # for i, doc_id in enumerate(doc_ids):
+        #     for query in queries[i]:
+        for doc_id, query in zip(doc_ids, queries):
+            result = self.RAG.search(query=query, k=self.k, doc_ids=[doc_id]) 
+            row = []
+            for x in result:
+                row.append(x['content'])            
+            all_documents.append(row)
         return all_documents
         
         
