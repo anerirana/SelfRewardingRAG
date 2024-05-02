@@ -32,24 +32,25 @@ Knowledge Base:
 Question : \"{original_query}\"
 """
 
-REWARD_PROMPT = """Review the user's question and the corresponding response using the 5-point scoring system described below. Points are accumulated based on the satisfaction of each criterion:
+REWARD_PROMPT = """Review the user's question with the provided knowledge base and the corresponding response using the additive 5-point scoring system described below. Points are accumulated based on the satisfaction of each criterion:
 
-- Award 1 point if the response is relevant and provides some information related to the user's inquiry, even if it is incomplete or contains some irrelevant content.
-- Award 2 points if the response addresses a substantial portion of the user's question but does not completely resolve the query or provide a direct answer.
-- Award 3 points if the response answers the basic elements of the user's question in a useful way, regardless of whether it seems to have been written by an AI Assistant or if it has elements typically found in blogs or search results.
-- Award 4 points if the response is clearly written from an AI Assistant's perspective, addressing the user's question directly and comprehensively, and is well-organizedand helpful,even if there is slight room for improvement in clarity, conciseness or focus.
-- Award 5 points for a response that is impeccably tailored to the user's question by an AI Assistant, without extraneous information, reflecting expert knowledge, and demonstrating a high-quality, engaging, and insightful answer.
+- Give 0 points if the response is completely irrelevant.
+- Add 1 point if the response is relevant and provides some information related to the user's inquiry, even if it is incomplete or contains some irrelevant content.
+- Add another point if the response addresses a substantial portion of the user's question but does not completely resolve the query or provide a direct answer.
+- Award a third point if the response answers the basic elements of the user's question by combining several pieces of information from the knowledge base, although the answer might not be complete.
+- Grant a fourth point if the response is clearly written and addresses the user's question directly. However, there is room for improvement by using additional contextual information from the knowledge base.
+- Bestow a fifth point for a response that contains the key information requested in the user's question. The response is clear, comprehensive, and summarizes all relevant pieces of the information provided in the knowledge base.
 
-User: {original_query} 
+User: {original_query}
 Response: {answer}
 
 After examining the user's instruction and the response:
 
--Briefly justify your total score.
--Conclude with the score using the format: 
-“Score:<Points awarded> out of 5”
+-Briefly criticize your total score.
+-Note that the answer is allowed to combine several pieces of information even though the answer is not directly quoted from the knowledge base.
+-Conclude with the score using the format: “Score: [0-5] out of 5”
 
-Remember to assess from the AI Assistant perspective, utilizing web search knowledge as necessary. """
+Remember to assess from a financial AI Assistant perspective. """
 
 SAMPLING_PARAMS_DICT = {
             "temperature":0.7, 
