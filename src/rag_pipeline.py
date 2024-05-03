@@ -9,6 +9,7 @@ from document_retriver import DocumentRetrievalModel
 from constants import *
 import re
 from tqdm import tqdm
+import json
 
 # Utilities
 def exists(val):
@@ -54,112 +55,114 @@ class RAGPipeline:
             The original query to generate responses for
         '''
         dpo_dataset_dict = {}
-        count = tqdm(total=self.m*len(original_queries[0])*len(original_queries), desc='RAG Iterations', position=0)
+        count = tqdm(total=self.m*len(original_queries), desc='RAG Iterations', position=0)
         f = open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","x")
-        for i, doc_id in enumerate(doc_ids):
-            for original_query in original_queries[i]:
-                qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
-                aug_queries = []
-                all_documents = []
-                top_documents = []
-                all_responses = []
-                all_rewards = np.zeros((self.m, self.l), dtype=float)
-                contributing_documents = []
-                first_pps = []
+        # for i, doc_id in enumerate(doc_ids):
+        #     for original_query in original_queries[i]:
+        for doc_id, original_query in zip(doc_ids, original_queries):
+            qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
+            aug_queries = []
+            all_documents = []
+            top_documents = []
+            all_responses = []
+            all_rewards = np.zeros((self.m, self.l), dtype=float)
+            contributing_documents = []
+            first_pps = []
 
-                for i in range(self.m):
-                    queries = self.get_augmented_queries(qa_prompt, original_query)
-                    top_k_docs, all_docs = self.document_retrieval_model.train(queries, doc_id)
-                    
-                    knowledge_base = []
-                    ctr = 0
-                    for doc in top_k_docs:
-                        knowledge_base.append(f"Source {ctr+1}: {doc}")
-                        ctr+=1
-                    
-                    if self.training_mode == TrainingMode().ResponseWithCitation:
-                        rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-                    else:
-                        rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-                    responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
-                    rewards = [self.get_rewards(original_query, response) for response in responses]
-                    try:
-                        f = open(OUTPUT_DIRECTORY + "response_rewards.txt","a")                    
-                    except:
-                        f = open(OUTPUT_DIRECTORY +  "response_rewards.txt","w")
-                    f.write("responses: ")
-                    f.write(str(responses))
-                    f.write("rewards: ")
-                    f.write(str(rewards))
-                    f.close()
-
-                    pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
-                    
-
-
-                    first_pps.append(pp1)
-                    aug_queries.append(queries)
-                    all_documents.append(all_docs)           
-                    top_documents.append(top_k_docs)
-                    all_responses.append(responses)
-                    all_rewards[i] = rewards
-                    contributing_documents.append(contri_docs)
-                    count.update(1)
-                print("outside")
-                all_responses=np.array(all_responses)
-                pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
-
-                # print(">>"*100)
-                # print("aug_queries: ")            
-                # print(str(self.find_list_dimensions(aug_queries)))        
-                # print("all_documents: ")
-                # print(str(self.find_list_dimensions(all_documents)))
-                # print("top_documents: ")
-                # print(str(self.find_list_dimensions(top_documents)))
-                # print("all_responses: ")
-                # print(str(all_responses.shape))
-                # print("all_rewards: ")
-                # print(str(all_rewards.shape))
-                # print("contributing_documents: ")
-                # print(str(self.find_list_dimensions(contributing_documents)))
-                # print("first_pps: ")
-                # print(str(self.find_list_dimensions(first_pps)))
-                # print("second_pps: ")
-                # print(len(pp2))
-                # print(">>"*100)
-
-                with open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","a") as f:
-                    f.write("original_query: ")
-                    f.write(str(original_query))
-                    f.write(">>"*100)
-                    f.write("aug_queries: ")
-                    f.write(str(aug_queries))
-                    f.write(">>"*100)
-                    f.write("all_documents: ")
-                    f.write(str(all_documents))
-                    f.write(">>"*100)
-                    f.write("top_documents: ")
-                    f.write(str(top_documents))
-                    f.write(">>"*100)
-                    f.write("all_responses: ")
-                    f.write(str(all_responses))
-                    f.write(">>"*100)
-                    f.write("all_rewards: ")
-                    f.write(str(all_rewards))
-                    f.write(">>"*100)
-                    f.write("contributing_documents: ")
-                    f.write(str(contributing_documents))
-                    f.write(">>"*100)
-                    f.write("first_pps: ")
-                    f.write(str(first_pps))
-                    f.write(">>"*100)
-                    f.write("second pp")
-                    f.write(str(pp2))
-                    f.write(">>"*100)
+            for i in range(self.m):
+                queries = self.get_augmented_queries(qa_prompt, original_query)
+                top_k_docs, all_docs = self.document_retrieval_model.train(queries, doc_id)
                 
-                dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
-        print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
+                knowledge_base = []
+                ctr = 0
+                for doc in top_k_docs:
+                    knowledge_base.append(f"Source {ctr+1}: {doc}")
+                    ctr+=1
+                
+                if self.training_mode == TrainingMode().ResponseWithCitation:
+                    rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+                else:
+                    rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+                responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
+                rewards = [self.get_rewards(original_query, response, rag_prompt) for response in responses]
+                try:
+                    f = open(OUTPUT_DIRECTORY + "response_rewards.txt","a")                    
+                except:
+                    f = open(OUTPUT_DIRECTORY +  "response_rewards.txt","w")
+                f.write("responses: ")
+                f.write(str(responses))
+                f.write("rewards: ")
+                f.write(str(rewards))
+                f.close()
 
+                pp1 = self.pp_generator.generateFirstPP(rag_prompt, responses, rewards)
+                
+
+
+                first_pps.append(pp1)
+                aug_queries.append(queries)
+                all_documents.append(all_docs)           
+                top_documents.append(top_k_docs)
+                all_responses.append(responses)
+                all_rewards[i] = rewards
+                contributing_documents.append(contri_docs)
+                count.update(1)
+            all_responses=np.array(all_responses)
+            pp2 = self.pp_generator.generateSecondPP(qa_prompt, aug_queries, all_documents, top_documents, all_rewards, contributing_documents)
+
+            # print(">>"*100)
+            # print("aug_queries: ")            
+            # print(str(self.find_list_dimensions(aug_queries)))        
+            # print("all_documents: ")
+            # print(str(self.find_list_dimensions(all_documents)))
+            # print("top_documents: ")
+            # print(str(self.find_list_dimensions(top_documents)))
+            # print("all_responses: ")
+            # print(str(all_responses.shape))
+            # print("all_rewards: ")
+            # print(str(all_rewards.shape))
+            # print("contributing_documents: ")
+            # print(str(self.find_list_dimensions(contributing_documents)))
+            # print("first_pps: ")
+            # print(str(self.find_list_dimensions(first_pps)))
+            # print("second_pps: ")
+            # print(len(pp2))
+            # print(">>"*100)
+
+            with open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","a") as f:
+                f.write("original_query: ")
+                f.write(str(original_query))
+                f.write(">>"*100)
+                f.write("aug_queries: ")
+                f.write(str(aug_queries))
+                f.write(">>"*100)
+                f.write("all_documents: ")
+                f.write(str(all_documents))
+                f.write(">>"*100)
+                f.write("top_documents: ")
+                f.write(str(top_documents))
+                f.write(">>"*100)
+                f.write("all_responses: ")
+                f.write(str(all_responses))
+                f.write(">>"*100)
+                f.write("all_rewards: ")
+                f.write(str(all_rewards))
+                f.write(">>"*100)
+                f.write("contributing_documents: ")
+                f.write(str(contributing_documents))
+                f.write(">>"*100)
+                f.write("first_pps: ")
+                f.write(str(first_pps))
+                f.write(">>"*100)
+                f.write("second pp")
+                f.write(str(pp2))
+                f.write(">>"*100)
+            
+            dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
+        print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
+        
+        with open(OUTPUT_DIRECTORY + "dpo_preference_pairs_" + str(epoch) + ".json", "w") as f: 
+            json.dump(dpo_dataset_dict, f)
         # torch.cuda.set_device(0)  # Assuming you want to use the first GPU
 
         # Train the model on that GPU
@@ -224,7 +227,7 @@ class RAGPipeline:
                 contri_docs.append([])
                 print("Response does not have correct sources format") 
             
-            reward = self.get_rewards(original_query, answer)
+            reward = self.get_rewards(original_query, answer, rag_prompt)
             gold_reward = self.get_rewards(original_query, gold_answer)
             prompts.append(rag_prompt)
             answers.append(answer)
@@ -264,7 +267,7 @@ class RAGPipeline:
                 contri_docs.append([])
                 print("Response does not have correct sources format") 
             
-            reward = self.get_rewards(original_query, answer)
+            reward = self.get_rewards(original_query, answer, rag_prompt)
             gold_reward = self.get_rewards(original_query, gold_answer)
             prompts.append(rag_prompt)
             answers.append(answer)
@@ -345,12 +348,16 @@ class RAGPipeline:
         # return
         return cited_documents
 
-    def get_rewards(self, original_query, response):
+    def get_rewards(self, original_query, response, rag_prompt=None):
         max_tries = 5
         j = 0
         do_retry = True
         reward=-1
-        reward_prompt = REWARD_PROMPT.format(original_query = original_query, answer = response)
+        if rag_prompt:
+            reward_prompt = REWARD_PROMPT.format(original_query = rag_prompt, answer = response)
+        else:
+            reward_prompt = REWARD_PROMPT.format(original_query = original_query, answer = response)
+
         while j < max_tries and do_retry:
             
             j=j+1
