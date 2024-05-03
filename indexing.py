@@ -4,6 +4,7 @@ import time
 from functools import partial
 from os import listdir
 from tqdm import tqdm
+from src.utils import *
 
 
 # from bs4 import BeautifulSoup
@@ -70,11 +71,6 @@ def fetch_docs_from_html(links_file_path='./CA_links.txt', index_path="./credit_
     print("Number of indexed documents: ", len(my_documents))
     RAG = RAGPretrainedModel.from_pretrained("colbert-ir/colbertv2.0")
     index_path = RAG.index(index_name=index_path, collection=my_documents)
-
-def read_file_as_string(file_path):
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    return file_content
 
 
 def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database", new_index=True, doc_ids=None): 
