@@ -48,7 +48,7 @@ warmup_ratio = 0.1
 
 # Group sequences into batches with same length
 # Saves memory and speeds up training considerably
-group_by_length = True
+group_by_length = False
 
 # Save checkpoint every X updates steps
 save_steps = 25

@@ -1,4 +1,5 @@
 import random
+TRANSFORMERS_TOKEN = ""
 OUTPUT_DIRECTORY = "/home/arana_umass_edu/SelfRewardingRAG/output/"
 QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {original_query}. 
 

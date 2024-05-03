@@ -14,6 +14,7 @@ from peft import LoraConfig, PeftModel
 # from unsloth import FastLanguageModel, PatchDPOTrainer,unsloth_save_model
 from datasets import Dataset, load_dataset
 from constants import *
+from training_args import *
 
 class LLM(nn.Module):
     def __init__(self, model_name="mistralai/Mistral-7B-Instruct-v0.2"):
@@ -58,14 +59,15 @@ class LLM(nn.Module):
             model_name,
             quantization_config=bnb_config,
             trust_remote_code=True,
-            device_map="auto"
+            device_map="auto", #get_kbit_device_map(),
+            token=TRANSFORMERS_TOKEN
         )                        
 
         self.model.config.use_cache = False
         self.model.config.pretraining_tp = 1
 
         # Load MitsralAi tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, token=TRANSFORMERS_TOKEN)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = "right"
 
@@ -114,8 +116,8 @@ class LLM(nn.Module):
         
         return self.tokenizer.decode(outputs[0])
 
-    def train(self, epoch, training_dataset, batch_size=32, num_epochs=3):
-        dataset = load_dataset('json', data_files='./training_dataset.jsonl' , split='train')
+    def train(self, epoch, training_dataset=None, batch_size=32, num_epochs=3):
+        dataset = load_dataset('json', data_files='output/dpo_preference_pairs_0.json', split="train")
 
         # Set LoRA configuration
         peft_config = LoraConfig(
@@ -138,7 +140,7 @@ class LLM(nn.Module):
 
         # Set training parameters
         training_arguments = TrainingArguments(
-            output_dir=output_dir,
+            output_dir=OUTPUT_DIRECTORY,
             num_train_epochs=num_train_epochs,
             per_device_train_batch_size=per_device_train_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
@@ -148,7 +150,7 @@ class LLM(nn.Module):
             learning_rate=learning_rate,
             weight_decay=weight_decay,
             fp16=fp16,
-            # bf16=bf16,
+            # bf16=bf16,  
             max_grad_norm=max_grad_norm,
             max_steps=100, # the total number of training steps to perform
             warmup_ratio=warmup_ratio,
@@ -157,48 +159,36 @@ class LLM(nn.Module):
         )
 
         # Initialize the SFTTrainer for fine-tuning
-        trainer = SFTTrainer(
-            model=self.model,
-            train_dataset=dataset,
-            peft_config=peft_config,
-            dataset_text_field="text",
-            max_seq_length=max_seq_length,  # You can specify the maximum sequence length here
-            tokenizer=self.tokenizer,
-            args=training_arguments,
-            packing=packing,
-        )
+        # trainer = SFTTrainer(
+        #     model=self.model,
+        #     train_dataset=dataset,
+        #     peft_config=peft_config,
+        #     dataset_text_field="text",
+        #     max_seq_length=max_seq_length,  # You can specify the maximum sequence length here
+        #     tokenizer=self.tokenizer,
+        #     args=training_arguments,
+        #     packing=packing
+        # )
 
-        trainer.train()
+        # trainer.train()
         # dataset = Dataset.from_dict(training_dataset)
 
         # PatchDPOTrainer()
-        # dpo_trainer = DPOTrainer(
-        #     model = self.model,
-        #     ref_model = None,
-        #     args = TrainingArguments(
-        #         per_device_train_batch_size = 2,
-        #         gradient_accumulation_steps = 4,
-        #         warmup_ratio = 0.1,
-        #         num_train_epochs = 3,
-        #         learning_rate = 5e-6,
-        #         fp16 = not torch.cuda.is_bf16_supported(),
-        #         bf16 = torch.cuda.is_bf16_supported(),
-        #         logging_steps = 1,
-        #         optim = "adamw_8bit",
-        #         weight_decay = 0.0,
-        #         lr_scheduler_type = "linear",
-        #         seed = 42,
-        #         output_dir = OUTPUT_DIRECTORY + "training_arguments",
-        #     ),
-        #     beta = 0.1,
-        #     train_dataset = dataset,
-        #     # eval_dataset = raw_datasets["test"],
-        #     tokenizer = self.tokenizer,
-        #     max_length = 1024,
-        #     max_prompt_length = 512,
-        # )
-        # print(">>"*40 + " BEGINING TRAINING " + ">>"*40)
-        # dpo_trainer.train()
+        dpo_trainer = DPOTrainer(
+            model = self.model,
+            ref_model = None,
+            peft_config=peft_config,
+            args = training_arguments,
+            beta = 0.1,
+            train_dataset = dataset,
+            # eval_dataset = raw_datasets["test"],
+            tokenizer = self.tokenizer,
+            # max_length = None,
+            # max_prompt_length = None,
+        )
+        print(">>"*40 + " BEGINING TRAINING " + ">>"*40)
+        dpo_trainer.train()
         # unsloth_save_model(self.model, self.tokenizer, OUTPUT_DIRECTORY + "model_epoch_" + str(epoch), push_to_hub=False, token=None)
-        # print(">>"*40 + " END TRAINING " + ">>"*40)
+        dpo_trainer.save_model()
+        print(">>"*40 + " END TRAINING " + ">>"*40)
 
