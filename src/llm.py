@@ -69,7 +69,7 @@ class LLM(nn.Module):
         # Load MitsralAi tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, token=TRANSFORMERS_TOKEN)
         self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.tokenizer.padding_side = "right"
+        self.tokenizer.padding_side = "left"
 
         # max_seq_length = 4096 # Choose any! We auto support RoPE Scaling internally!
         # dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
@@ -96,25 +96,37 @@ class LLM(nn.Module):
         #     loftq_config = None, # And LoftQ
         # )
     
-    def forward(self, prompt, param_dict=None):
+    def forward(self, prompts, param_dict=None, batch_process=False):
         '''Generate response for the given prompt
 
         Parameters:
         -----------
-        prompt
-            The prompt used as input to the generative model.
+        prompts
+            The list of prompts used as input to the generative model.
             Could be a RAG or QA or reward prompt.
         '''
-        messages = [{"role":"user", "content":prompt}]
-        encoded = self.tokenizer.apply_chat_template(messages, return_tensors="pt")
-        inputs = encoded.to(self.model.device)     
-        
-        if param_dict is None:
-            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+        if batch_process:
+            messages = [[{"role":"user", "content": prompt}] for prompt in prompts]
+            inputs = self.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True, padding=True).to(self.model.device)     
+            
+            with torch.no_grad():
+                if param_dict is None:
+                    outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.9, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+                else:
+                    outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
+                
+            return self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
         else:
-            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
-        
-        return self.tokenizer.decode(outputs[0])
+            messages = [{"role":"user", "content":prompts}]
+            encoded = self.tokenizer.apply_chat_template(messages, return_tensors="pt")
+            inputs = encoded.to(self.model.device)     
+            
+            if param_dict is None:
+                outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+            else:
+                outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
+            
+            return self.tokenizer.decode(outputs[0])
 
     def train(self, epoch, training_dataset=None, batch_size=32, num_epochs=3):
         dataset = load_dataset('json', data_files='output/dpo_preference_pairs_0.json', split="train")
@@ -191,4 +203,3 @@ class LLM(nn.Module):
         # unsloth_save_model(self.model, self.tokenizer, OUTPUT_DIRECTORY + "model_epoch_" + str(epoch), push_to_hub=False, token=None)
         dpo_trainer.save_model()
         print(">>"*40 + " END TRAINING " + ">>"*40)
-
