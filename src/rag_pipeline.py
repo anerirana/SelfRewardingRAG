@@ -60,9 +60,13 @@ class RAGPipeline:
         '''
         dpo_dataset_dict = {}
         count = tqdm(total=self.m*len(original_queries), desc='RAG Iterations', position=0)
-        f = open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","x")
+        # f = open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","x")
         # for i, doc_id in enumerate(doc_ids):
         #     for original_query in original_queries[i]:
+        query_aug_time = 0
+        doc_ret_time = 0
+        resp_gen_time = 0
+        reward_gen_time = 0
         for doc_id, original_query in zip(doc_ids, original_queries):
             
             qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
@@ -77,11 +81,11 @@ class RAGPipeline:
             for i in range(self.m):
                 start_time = time.time()
                 queries = self.get_augmented_queries(qa_prompt, original_query)
-                print("Query aug time: ", str(time.time()-start_time))
-                
+                query_aug_time += time.time()-start_time
+
                 start_time = time.time()
                 top_k_docs, all_docs = self.document_retrieval_model.train(queries, doc_id)
-                print("Doc retrieval time: ", str(time.time()-start_time))
+                doc_ret_time += time.time()-start_time
                 
                 start_time = time.time()
                 knowledge_base = []
@@ -93,11 +97,11 @@ class RAGPipeline:
                 rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
                 
                 responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
-                print("Response generation time: ", str(time.time()-start_time))
+                resp_gen_time += time.time()-start_time
 
                 start_time = time.time()      
-                rewards = self.get_rewards(original_query, responses, rag_prompt)
-                print("Reward generation time: ", str(time.time()-start_time))
+                rewards = self.get_rewards(original_query, responses, rag_prompt)  
+                reward_gen_time += time.time()-start_time
                 # try:
                 #     f = open(OUTPUT_DIRECTORY + "response_rewards.txt","a")                    
                 # except:
@@ -139,41 +143,48 @@ class RAGPipeline:
             # print(len(pp2))
             # print(">>"*100)
 
-            with open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","a") as f:
-                f.write("original_query: ")
-                f.write(str(original_query))
-                f.write(">>"*100)
-                f.write("aug_queries: ")
-                f.write(str(aug_queries))
-                f.write(">>"*100)
-                f.write("all_documents: ")
-                f.write(str(all_documents))
-                f.write(">>"*100)
-                f.write("top_documents: ")
-                f.write(str(top_documents))
-                f.write(">>"*100)
-                f.write("all_responses: ")
-                f.write(str(all_responses))
-                f.write(">>"*100)
-                f.write("all_rewards: ")
-                f.write(str(all_rewards))
-                f.write(">>"*100)
-                f.write("contributing_documents: ")
-                f.write(str(contributing_documents))
-                f.write(">>"*100)
-                f.write("first_pps: ")
-                f.write(str(first_pps))
-                f.write(">>"*100)
-                f.write("second pp")
-                f.write(str(pp2))
-                f.write(">>"*100)
+            # with open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","a") as f:
+            #     f.write("original_query: ")
+            #     f.write(str(original_query))
+            #     f.write(">>"*100)
+            #     f.write("aug_queries: ")
+            #     f.write(str(aug_queries))
+            #     f.write(">>"*100)
+            #     f.write("all_documents: ")
+            #     f.write(str(all_documents))
+            #     f.write(">>"*100)
+            #     f.write("top_documents: ")
+            #     f.write(str(top_documents))
+            #     f.write(">>"*100)
+            #     f.write("all_responses: ")
+            #     f.write(str(all_responses))
+            #     f.write(">>"*100)
+            #     f.write("all_rewards: ")
+            #     f.write(str(all_rewards))
+            #     f.write(">>"*100)
+            #     f.write("contributing_documents: ")
+            #     f.write(str(contributing_documents))
+            #     f.write(">>"*100)
+            #     f.write("first_pps: ")
+            #     f.write(str(first_pps))
+            #     f.write(">>"*100)
+            #     f.write("second pp")
+            #     f.write(str(pp2))
+            #     f.write(">>"*100)
             
             dpo_dataset_dict.update(self.dpo_parsing(first_pps,pp2))       
+        
+        print("Query aug time: ", str(query_aug_time))
+        print("Doc retrieval time: ", str(doc_ret_time))
+        print("Response generation time: ", str(resp_gen_time))
+        print("Reward generation time: ", str(reward_gen_time))
+        
         print("Number of training pairs = ", len(dpo_dataset_dict['prompt']))
         
         with open(OUTPUT_DIRECTORY + "dpo_preference_pairs_" + str(epoch) + ".json", "w") as f: 
             json.dump(dpo_dataset_dict, f)
-        torch.cuda.set_device(0)  # Assuming you want to use the first GPU
+        
+        # torch.cuda.set_device(0)  # Assuming you want to use the first GPU
 
         # # Train the model on that GPU
         self.language_model.train(epoch)
@@ -324,23 +335,23 @@ class RAGPipeline:
           
     def get_query_responses(self, rag_prompt, original_query, top_k_docs, i):
         responses=self.language_model([rag_prompt]*self.l, batch_process=True)
-        responses = [response.split("[/INST]")[-1] for reponse in responses]
+        responses = [response.split("[/INST]")[-1] for response in responses]
         answers = []
         contri_docs = []
         # for i in range(self.l):         
         if self.training_mode == TrainingMode().ResponseWithCitation:   
-            for reponse in responses             
+            for response in responses:             
                 try:
-                    answer, sources = re.split("sources?\s?used", reponse, flags=re.IGNORECASE)
+                    answer, sources = re.split("sources?\s?used", response, flags=re.IGNORECASE)
                     #TODO: Fall back to sentence similarity using llm's answer
                     source_list = re.findall("source.*\d+", sources, flags=re.I)
                 except ValueError as e:
                     try:
                         with open("output/doc_citation_error.txt","a") as f:
-                            f.write("Response does not have correct sources format:\nResponse:\n{1}".format(reponse.encode('utf-8')))
+                            f.write("Response does not have correct sources format:\nResponse:\n{0}".format(response.encode('utf-8')))
                     except:
                         with open("output/doc_citation_error.txt","w") as f:
-                            f.write("Response does not have correct sources format:\nResponse:\n{1}".format(reponse.encode('utf-8')))
+                            f.write("Response does not have correct sources format:\nResponse:\n{0}".format(response.encode('utf-8')))
                 answers.append(answer)
                 contri_docs.append(source_list)
         else:
@@ -396,7 +407,7 @@ class RAGPipeline:
         #     j=j+1
         reward_responses = self.language_model(reward_prompts, batch_process=True)
         rewards = []
-        for reward_response in reward_responses:
+        for i,reward_response in enumerate(reward_responses):
             match = re.search("Final Score: ([0-9]+) out of 5", reward_response)
             if not match:
                 match =  re.search("Total score = ([0-9]+) out of 5", reward_response)
@@ -406,16 +417,16 @@ class RAGPipeline:
                 match =  re.search("([0-9]+) out of 5", reward_response)       
 
             if match:
-                rewards.append(match.group(1)) 
+                rewards.append(int(match.group(1))) 
             else:
-                rewards.append(None)
+                rewards.append(0)
                 try:
                     with open("output/reward_error.txt","a") as f:
-                        f.write("Unable to generate reward with the prompt:\n{1} \nResponse:\n{2}".format(reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
+                        f.write("Unable to generate reward with the prompt:\n{0} \nResponse:\n{1}".format(reward_prompts[i].encode('utf-8'), reward_response.encode('utf-8')))
                         # raise Exception("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(max_tries, REWARD_PROMPT.format(original_query = original_query, answer = response), reward_response))
                 except:
                     with open("output/reward_error.txt","w") as f:
-                        f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
+                        f.write("Unable to generate reward with the prompt:\n{0} \nResponse:\n{1}".format(reward_prompts[i].encode('utf-8'), reward_response.encode('utf-8')))
                     
                 
         
@@ -429,7 +440,7 @@ class RAGPipeline:
         #             f.write("Unable to generate reward after {0} retries with the prompt:\n{1} \nResponse:\n{2}".format(str(max_tries), reward_prompt.encode('utf-8'), reward_response.encode('utf-8')))
                     
         
-        return reward
+        return rewards
     
     def get_augmented_queries(self, qa_prompt, original_query):
         '''
@@ -462,9 +473,9 @@ class RAGPipeline:
                 match = re.search(str(i)+r"\.(.*)",response)
             if not match:
                 try:
-                    f = open("output/query_aug_error.txt","a")
+                    f = open(OUTPUT_DIRECTORY + "query_aug_error.txt","a")
                 except:
-                    f = open("output/query_aug_error.txt","w")
+                    f = open(OUTPUT_DIRECTORY + "query_aug_error.txt","w")
                 f.write(f"Query version {i} not found in response:")
                 f.write(str(response))
                 f.close()
