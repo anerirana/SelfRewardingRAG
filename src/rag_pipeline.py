@@ -10,6 +10,9 @@ from constants import *
 import re
 from tqdm import tqdm
 import json
+import time  # Import the time module
+import re
+
 
 # Utilities
 def exists(val):
@@ -70,8 +73,16 @@ class RAGPipeline:
             first_pps = []
 
             for i in range(self.m):
+                qa_time_start = time.time()
+
                 queries = self.get_augmented_queries(qa_prompt, original_query)
+                qa_time_end = time.time()
+                print("The query aug time is {0}".format(qa_time_end-qa_time_start))
+                docs_start = time.time()
+
                 top_k_docs, all_docs = self.document_retrieval_model.train(queries, doc_id)
+                docs_end=time.time()
+                print("The doc retreive time is {0}".format(docs_end-docs_start))
                 
                 knowledge_base = []
                 ctr = 0
@@ -80,15 +91,27 @@ class RAGPipeline:
                     ctr+=1
                 
                 if self.training_mode == TrainingMode().ResponseWithCitation:
+                    
                     rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+                    
+
                 else:
                     rag_prompt = RAG_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
+                rag_promt_start=time.time()
                 responses, contri_docs = self.get_query_responses(rag_prompt, original_query, top_k_docs, i)
+                rag_promt_end=time.time()
+                print("The response retreive time is {0}".format(rag_promt_end-rag_promt_start))
+
+                reward_promt_start=time.time()
+
                 rewards = [self.get_rewards(original_query, response, rag_prompt) for response in responses]
+                reward_promt_end=time.time()
+                print("The reward retreive time is {0}".format(reward_promt_end-reward_promt_start))
+
                 try:
-                    f = open(OUTPUT_DIRECTORY + "response_rewards.txt","a")                    
+                    f = open(OUTPUT_DIRECTORY + "response_rewards.txt","a",encoding='utf-8')                    
                 except:
-                    f = open(OUTPUT_DIRECTORY +  "response_rewards.txt","w")
+                    f = open(OUTPUT_DIRECTORY +  "response_rewards.txt","w",encoding='utf-8')
                 f.write("responses: ")
                 f.write(str(responses))
                 f.write("rewards: ")
@@ -129,7 +152,7 @@ class RAGPipeline:
             # print(len(pp2))
             # print(">>"*100)
 
-            with open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","a") as f:
+            with open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","a",encoding='utf-8') as f:
                 f.write("original_query: ")
                 f.write(str(original_query))
                 f.write(">>"*100)
@@ -166,7 +189,11 @@ class RAGPipeline:
         # torch.cuda.set_device(0)  # Assuming you want to use the first GPU
 
         # Train the model on that GPU
-        self.language_model.train(epoch, dpo_dataset_dict)
+
+        # dpo_dataset_dict='/home/samvegvipuls_umass_edu/final_code/SelfRewardingRAG/outputdpo_preference_pairs_0.json'
+        # dpo_parsing()
+        # self.language_model.train(epoch, dpo_dataset_dict)
+
     def compute_scores(self,references, predictions):
         """
         Compute multiple scores (BLEU, ROUGE, METEOR, etc.) given references and candidate translations.
@@ -309,9 +336,12 @@ class RAGPipeline:
         for i in range(self.l):         
             if self.training_mode == TrainingMode().ResponseWithCitation:
                 answer=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1] #.split("<|end_of_turn|>")[1]
+
                 try:
                     answer, sources = re.split("sources?\s?used", answer, flags=re.IGNORECASE)
                 except ValueError as e:
+                    sources=""
+
                     print("Response does not have correct sources format")
                     #TODO: Fall back to sentence similarity using llm's answer
                 source_list = re.findall("source.*\d+", sources, flags=re.I)
@@ -348,8 +378,16 @@ class RAGPipeline:
         # return
         return cited_documents
 
+    def text_to_number(self,text):
+        numbers = {
+            'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+            'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+        }
+        return numbers.get(text.lower(), text)
+
     def get_rewards(self, original_query, response, rag_prompt=None):
         max_tries = 5
+     
         j = 0
         do_retry = True
         reward=-1
@@ -358,8 +396,7 @@ class RAGPipeline:
         else:
             reward_prompt = REWARD_PROMPT.format(original_query = original_query, answer = response)
 
-        while j < max_tries and do_retry:
-            
+        while j < max_tries and do_retry:            
             j=j+1
             reward_response = self.language_model(reward_prompt)
             
@@ -370,10 +407,26 @@ class RAGPipeline:
                 match =  re.search("Score: ([0-9]+) out of 5", reward_response, flags=re.IGNORECASE)
             if not match:
                 match = re.search("score of ([0-9]+) out of 5", reward_response, flags=re.IGNORECASE)
-
             if match:
                 reward = match.group(1)  
                 do_retry = False
+            if not match:
+                patterns = [
+                    r"(\d+|one|two|three|four|five|six|seven|eight|nine|ten) out of (?:5|five)",
+                    r"Score: (\d+|one|two|three|four|five|six|seven|eight|nine|ten) ?(?:/|out of) ?(5|five)",
+                    r"Total Score: (\d+|one|two|three|four|five|six|seven|eight|nine|ten) out of (?:10|ten)",
+                    r"a score of (\d+|one|two|three|four|five|six|seven|eight|nine|ten)"
+                ]
+                match=False
+                for pattern in patterns:
+                    match = re.search(pattern, reward_response, flags=re.IGNORECASE)
+                    if match:
+                        # Assuming the score is always the first group
+                        score_text = match.group(1)
+                        score = self.text_to_number(score_text)
+                        do_retry = False
+                        reward= int(score)  # Convert score to integer
+                        break            
         
         if do_retry:
             try:
