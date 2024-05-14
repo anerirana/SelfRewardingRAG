@@ -96,7 +96,7 @@ class LLM(nn.Module):
         #     loftq_config = None, # And LoftQ
         # )
     
-    def forward(self, prompts, param_dict=None, batch_process=False):
+    def forward(self, prompts, num_return_sequences=None, batch_process=False, batch_size=16):
         '''Generate response for the given prompt
 
         Parameters:
@@ -106,26 +106,29 @@ class LLM(nn.Module):
             Could be a RAG or QA or reward prompt.
         '''
         if batch_process:
-            messages = [[{"role":"user", "content": prompt}] for prompt in prompts]
-            inputs = self.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True, padding=True).to(self.model.device)     
-            
-            with torch.no_grad():
-                if param_dict is None:
-                    outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.9, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+            outputs = []
+            for i in range((len(prompts)//batch_size)+1):
+                if (i+1)*batch_size > len(prompts):
+                    temp_prompts = prompts[i*batch_size:]
                 else:
-                    outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
+                    temp_prompts = prompts[i*batch_size:(i+1)*batch_size]
+                messages = [[{"role":"user", "content": prompt}] for prompt in temp_prompts]
+                inputs = self.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True, padding=True).to(self.model.device)     
                 
-            return self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+                with torch.no_grad():
+                    if num_return_sequences:
+                        temp_outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, num_return_sequences=num_return_sequences, temperature=0.7, top_p=0.9, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+                    else:
+                        temp_outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.9, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+
+                outputs.extend(self.tokenizer.batch_decode(temp_outputs, skip_special_tokens=True))
+            return outputs
+      
         else:
             messages = [{"role":"user", "content":prompts}]
             encoded = self.tokenizer.apply_chat_template(messages, return_tensors="pt")
-            inputs = encoded.to(self.model.device)     
-            
-            if param_dict is None:
-                outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
-            else:
-                outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=param_dict["temperature"], top_p=param_dict["top_p"], repetition_penalty=param_dict["repetition_penalty"], min_new_tokens=param_dict["min_new_tokens"], max_new_tokens=param_dict["max_new_tokens"], do_sample=True)
-            
+            inputs = encoded.to(self.model.device)       
+            outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)            
             return self.tokenizer.decode(outputs[0])
 
     def train(self, epoch, training_dataset=None, batch_size=32, num_epochs=3):
@@ -152,7 +155,7 @@ class LLM(nn.Module):
 
         # Set training parameters
         training_arguments = TrainingArguments(
-            output_dir=OUTPUT_DIRECTORY,
+            output_dir=TRAIN_OUTPUT_DIRECTORY,
             num_train_epochs=num_train_epochs,
             per_device_train_batch_size=per_device_train_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
@@ -201,5 +204,6 @@ class LLM(nn.Module):
         print(">>"*40 + " BEGINING TRAINING " + ">>"*40)
         dpo_trainer.train()
         # unsloth_save_model(self.model, self.tokenizer, OUTPUT_DIRECTORY + "model_epoch_" + str(epoch), push_to_hub=False, token=None)
-        dpo_trainer.save_model()
+        dpo_trainer.save_model(TRAIN_OUTPUT_DIRECTORY + '/mistral-v2-finetuned_' + str(epoch))
         print(">>"*40 + " END TRAINING " + ">>"*40)
+

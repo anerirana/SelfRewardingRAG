@@ -1,6 +1,7 @@
 import random
 TRANSFORMERS_TOKEN = ""
-OUTPUT_DIRECTORY = "/home/arana_umass_edu/SelfRewardingRAG/output/"
+OUTPUT_DIRECTORY = "SelfRewardingRAG/output/"
+TRAIN_OUTPUT_DIRECTORY = "/scratch/workspace/ppruthi_umass_edu-goldman_project/training_output"
 QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {original_query}. 
 
 - Each version of the query should be distinct and relevant to the original query.
