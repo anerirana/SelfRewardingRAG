@@ -4,7 +4,6 @@ import jsonlines
 import time
 import pandas as pd
 
-
 NUM_TRAIN_EPOCHS = 3
 model_config = { 
   "NumberOfRetrievedDocuments":5, #p
@@ -15,10 +14,25 @@ model_config = {
   "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.2', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
   "TrainingMode":TrainingMode().ResponseWithCitation,
-  "QueryAugmentationBatchSize": 64,
-  "AnswerGenerationBtachSize": 16,
+  "QueryAugmentationBatchSize": 16,
+  "AnswerGenerationBtachSize": 8,
   "RewardGenerationBtachSize": 8
 }
+
+# NUM_TRAIN_EPOCHS = 2
+# model_config = { 
+#   "NumberOfRetrievedDocuments":5, #p
+#   "NumberOfQuerySets":3, #m
+#   "NumberOfAugementedQueries":3,#n
+#   "NumberOfResponses":3, #l
+#   "NumberOfTopkDocuments":3, #k
+#   "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.2', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
+#   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
+#   "TrainingMode":TrainingMode().ResponseWithCitation,
+#   "QueryAugmentationBatchSize": 16,
+#   "AnswerGenerationBtachSize": 8,
+#   "RewardGenerationBtachSize": 8
+# }
 
 
 rag_pipeline = RAGPipeline(model_config)
@@ -39,7 +53,7 @@ rag_pipeline = RAGPipeline(model_config)
 # doc_ids = ["4c2ec99f83bc81396ff37d5e7abf9880b713a61fc0d6c7b5e1fce184653e226b"]
 
 
-df = pd.read_csv("/home/ppruthi_umass_edu/SelfRewardingRAG/data/mistral_basdeline_human_reward_annotations.csv")[:100]
+df = pd.read_csv("~/SelfRewardingRAG/data/mistral_basdeline_human_reward_annotations.csv")
 print("df.shape", df.shape)
 doc_ids = df['Document_ID'].apply(lambda x: x.split('_response')[0])
 for epoch in range(NUM_TRAIN_EPOCHS):

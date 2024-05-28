@@ -112,16 +112,17 @@ class LLM(nn.Module):
                     temp_prompts = prompts[i*batch_size:]
                 else:
                     temp_prompts = prompts[i*batch_size:(i+1)*batch_size]
-                messages = [[{"role":"user", "content": prompt}] for prompt in temp_prompts]
-                inputs = self.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True, padding=True).to(self.model.device)     
-                
-                with torch.no_grad():
-                    if num_return_sequences:
-                        temp_outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, num_return_sequences=num_return_sequences, temperature=0.7, top_p=0.9, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
-                    else:
-                        temp_outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.9, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+                if len(temp_prompts) > 0:
+                    messages = [[{"role":"user", "content": prompt}] for prompt in temp_prompts]
+                    inputs = self.tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True, padding=True).to(self.model.device)     
+                    
+                    with torch.no_grad():
+                        if num_return_sequences:
+                            temp_outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, num_return_sequences=num_return_sequences, temperature=0.7, top_p=0.9, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
+                        else:
+                            temp_outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.9, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)
 
-                outputs.extend(self.tokenizer.batch_decode(temp_outputs, skip_special_tokens=True))
+                    outputs.extend(self.tokenizer.batch_decode(temp_outputs, skip_special_tokens=True))
             return outputs
       
         else:
@@ -131,7 +132,7 @@ class LLM(nn.Module):
             outputs = self.model.generate(inputs, pad_token_id=self.tokenizer.eos_token_id, temperature=0.7, top_p=0.99, repetition_penalty=1.2, min_new_tokens=16, max_new_tokens=2048, do_sample=True)            
             return self.tokenizer.decode(outputs[0])
 
-    def train(self, epoch, training_dataset=None, batch_size=32, num_epochs=3):
+    def train(self, epoch, dataset=None, batch_size=32, num_epochs=3):
         dataset = load_dataset('json', data_files='output/dpo_preference_pairs_0.json', split="train")
 
         # Set LoRA configuration

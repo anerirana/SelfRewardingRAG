@@ -19,6 +19,7 @@ class PreferencePairGenerator:
     def get_document_rewards(self, rho, winning_answers_idx, top_documents, contributing_documents):
         reward_docs = None
         for i, top_docs in enumerate(top_documents):
+            #length of top_docs = k
             if rho[i] < 0:
                 new_rewards = np.full(len(top_docs), np.nan)
             else:
@@ -45,7 +46,9 @@ class PreferencePairGenerator:
                         # top_doc=repr(top_doc)
                         if top_doc in all_documents[i][j]: # and len(top_doc)>0
                             indices_in_all_docs = np.where(np.asarray(all_documents[i][j]) == top_doc)
-                            sum += document_rewards[i][k] / (indices_in_all_docs[0][0] + 1)
+                            # Edge Case: None of the top documents were retrieved for the query
+                            if len(indices_in_all_docs[0]) > 0:
+                                sum += document_rewards[i][k] / (indices_in_all_docs[0][0] + 1)
                     if sum > 0:
                         temp_rewards.append(sum)
                     else:
@@ -93,13 +96,15 @@ class PreferencePairGenerator:
         for i,rag_prompt in enumerate(rag_prompts):
             temp_ans = np.asarray(answers[i*self.l:(i+1)*self.l])
             temp_rewards = np.asarray(rewards[i*self.l:(i+1)*self.l])
+            # temp_rewards = [reward for reward in temp_rewards if reward != None]    
+            # temp_ans = [answer for (answer, reward) in zip(temp_ans,temp_rewards) if reward != None]
             
             _, max_idx = self.get_max(temp_rewards)
             _, min_idx = self.get_min(temp_rewards)
             if max_idx != min_idx:
                 pref_pairs.append((rag_prompt, temp_ans[max_idx], temp_ans[min_idx]))
-            else:
-                print("All rewards are same the in set: ", str(i))
+            # else:
+            #     print("All rewards are same the in set: ", str(i))
             
         return pref_pairs
 
@@ -114,10 +119,9 @@ class PreferencePairGenerator:
             docs = contri_docs[i*(self.l*self.m) : (i+1)*(self.l*self.m)]
             rewards = all_rewards[i*(self.l*self.m) : (i+1)*(self.l*self.m)]
             for j in range(self.m):         
-                temp_rewards.append(rewards[j*self.l : (j+1)*self.l])
-                temp_contri_docs.extend(docs[j*self.l : (j+1)*self.l]) 
+                temp_rewards.append(rewards[j*self.l : (j+1)*self.l]) #[reward for reward in rewards[j*self.l : (j+1)*self.l] if reward != None]   
+                temp_contri_docs.extend(docs[j*self.l : (j+1)*self.l]) #[doc for (doc, reward) in zip(docs[j*self.l : (j+1)*self.l], rewards[j*self.l : (j+1)*self.l]) if reward != None]   
                 temp_aug_queries.extend(aug_queries[(i*self.m)+j][1])                    
-            
             
             rho = []
             winning_answers_idx = []
@@ -130,8 +134,8 @@ class PreferencePairGenerator:
             rho = rho - np.mean(rho)
 
             temp_top_docs = top_k_docs[i*self.m : (i+1)*self.m]
-            temp_all_docs = all_docs[i*self.l : (i+1)*self.l]       
-            document_rewards = self.get_document_rewards(rho, winning_answers_idx, temp_top_docs, temp_contri_docs)         
+            temp_all_docs = all_docs[i*self.l : (i+1)*self.l]
+            document_rewards = self.get_document_rewards(rho, winning_answers_idx, temp_top_docs, temp_contri_docs)
             aug_query_rewards = self.get_augment_query_rewards(temp_all_docs, document_rewards, temp_top_docs, rho)
             
             agg_aug_query_rewards = self.agg_query_rewards(aug_query_rewards, temp_aug_queries)

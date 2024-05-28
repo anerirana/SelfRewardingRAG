@@ -41,14 +41,14 @@ class RAGPipeline:
         self.l = default(config.get('NumberOfResponses'), 5)
         self.k = default(config.get('NumberOfTopkDocuments'), 5)
         
-        self.query_aug_batch_size = default(config.get('QueryAugmentationBatchSize'), 64)
-        self.answer_gen_batch_size = default(config.get('AnswerGenerationBtachSize'), 16)
+        self.query_aug_batch_size = default(config.get('QueryAugmentationBatchSize'), 16)
+        self.answer_gen_batch_size = default(config.get('AnswerGenerationBtachSize'), 8)
         self.reward_gen_batch_size = default(config.get('RewardGenerationBtachSize'), 8)
         self.language_model = LLM(default(config.get('LanguageModelName'), 'mistralai/Mistral-7B-Instruct-v0.2'))
         self.citation_model = SentenceTransformer(default(config.get('CitationModelName'), 'sentence-transformers/all-mpnet-base-v2'))
         self.training_mode = default(config.get('TrainingMode'), TrainingMode().SimiliarityScoreCitation)
 
-        self.document_retrieval_model = DocumentRetrievalModel(self.k, self.p)   
+        self.document_retrieval_model = DocumentRetrievalModel(self.k, self.p, PATH_TO_INDEX)   
         self.pp_generator = PreferencePairGenerator(self.language_model, self.m, self.n, self.l)
 
 
@@ -63,57 +63,52 @@ class RAGPipeline:
             The original query to generate responses for
         '''
         dpo_dataset_dict = {}
-        
         # f = open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","x")
-        # for i, doc_id in enumerate(doc_ids):
-        #     for original_query in original_queries[i]:
-        reward_gen_time = 0
 
         start_time = time.time()
         qa_prompts = [QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query) for original_query in original_queries]
-        print("len(qa_prompts): ", len(qa_prompts)) # len(original_queries)
+        print("len(qa_prompts): ", len(qa_prompts), flush=True) # len(original_queries)
         aug_queries = self.get_augmented_queries(qa_prompts, original_queries, doc_ids)
-        print("len(aug_queries): ", len(aug_queries))
+        print("len(aug_queries): ", len(aug_queries), flush=True)
         query_aug_time = time.time()-start_time
-        print("Query aug time: ", str(query_aug_time))
+        print("Query aug time: ", str(query_aug_time), flush=True)
 
         start_time = time.time()
-        top_k_docs, all_docs = self.document_retrieval_model.train(aug_queries)
-        print("len(all_docs): ", len(all_docs))
-        print("len(all_docs)[0]: ", len(all_docs[0]))
-        print("len(top_k_docs): ", len(top_k_docs))
-        print("len(top_k_docs)[0]: ", len(top_k_docs[0]))
+        top_k_docs, all_docs = self.document_retrieval_model.train_batch(aug_queries)
+        print("len(all_docs): ", len(all_docs), flush=True)
+        print("len(all_docs)[0]: ", len(all_docs[0]), flush=True)
+        print("len(top_k_docs): ", len(top_k_docs), flush=True)
+        print("len(top_k_docs)[0]: ", len(top_k_docs[0]), flush=True)
         doc_ret_time = time.time()-start_time
-        print("Doc retrieval time: ", str(doc_ret_time))
+        print("Doc retrieval time: ", str(doc_ret_time), flush=True)
 
         start_time = time.time()
         rag_prompts = self.get_rag_prompts(top_k_docs, original_queries)
-        print("len(rag_prompts): ", len(rag_prompts))
+        print("len(rag_prompts): ", len(rag_prompts), flush=True)
         answers, contri_docs = self.get_query_responses(rag_prompts, top_k_docs)
-        print("len(answers): ", len(answers))
-        print("len(contri_docs): ", len(contri_docs))
-        print("len(contri_docs[0]): ", len(contri_docs[0]))
+        print("len(answers): ", len(answers), flush=True)
+        print("len(contri_docs): ", len(contri_docs), flush=True)
+        print("len(contri_docs[0]): ", len(contri_docs[0]), flush=True)
         resp_gen_time = time.time()-start_time
-        print("Response generation time: ", str(resp_gen_time))
+        print("Response generation time: ", str(resp_gen_time), flush=True)
 
         start_time = time.time()      
         rewards = self.get_rewards(answers, rag_prompts)  
-        print("len(rewards): ", len(rewards))
+        print("len(rewards): ", len(rewards), flush=True)
         reward_gen_time = time.time()-start_time
-        print("Reward generation time: ", str(reward_gen_time))
+        print("Reward generation time: ", str(reward_gen_time), flush=True)
 
         pp1 = self.pp_generator.generateFirstPP(rag_prompts, answers, rewards)
-        print("numer of preference pairs type 1: ", len(pp1))
+        print("numer of preference pairs type 1: ", len(pp1), flush=True)
         pp2 = self.pp_generator.generateSecondPP(qa_prompts, aug_queries, all_docs, top_k_docs, rewards, contri_docs)
-        print("numer of preference pairs type 2: ", len(pp2))      
+        print("numer of preference pairs type 2: ", len(pp2), flush=True)      
             
         dpo_dataset_dict = self.dpo_parsing(pp1,pp2)
-        
-        
+                
         with open(OUTPUT_DIRECTORY + "dpo_preference_pairs_" + str(epoch) + ".json", "w") as f: 
             json.dump(dpo_dataset_dict, f)
         
-
+        # DPO Trainining
         self.language_model.train(epoch)
   
     def get_rag_prompts(self, top_k_docs, original_queries):
@@ -128,7 +123,8 @@ class RAGPipeline:
             
             rag_prompts.append(RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base)))
         return rag_prompts
-    def compute_scores(self,references, candidates):
+    
+    def compute_scores(self,references, predictions):
         """
         Compute multiple scores (BLEU, ROUGE, METEOR, etc.) given references and candidate translations.
 
@@ -143,70 +139,59 @@ class RAGPipeline:
 
         # Load and compute BLEU score
         bleu_metric = load_metric("bleu")
-        scores['BLEU'] = bleu_metric.compute(predictions=candidates, references=references)
+        scores['BLEU'] = bleu_metric.compute(predictions=predictions, references=references)
 
         # Load and compute ROUGE score
         rouge_metric = load_metric("rouge")
-        scores['ROUGE'] = rouge_metric.compute(predictions=candidates, references=references)
+        scores['ROUGE'] = rouge_metric.compute(predictions=predictions, references=references)
 
         # Load and compute METEOR score
         meteor_metric = load_metric("meteor")
-        scores['METEOR'] = meteor_metric.compute(predictions=candidates, references=references)
+        scores['METEOR'] = meteor_metric.compute(predictions=predictions, references=references)
 
         # You can add more metrics here in a similar fashion
 
         return scores
 
+    def prediction(self,original_queries,doc_ids,gold_answers):
+        start_time = time.time()
+        qa_prompts = [QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query) for original_query in original_queries]
+        print("len(qa_prompts): ", len(qa_prompts), flush=True) #x
+        aug_queries = self.get_augmented_queries(qa_prompts, original_queries, doc_ids)
+        print("len(aug_queries): ", len(aug_queries), flush=True) # x * m
+        print("len(aug_queries[0][1]):", len(aug_queries[0][1]), flush=True)
+        query_aug_time = time.time()-start_time
+        print("Query aug time: ", str(query_aug_time), flush=True)
 
-    # def prediction(self,query,doc_ids,real_ans):
-    #     # print(doc_ids)
-    #     queries=[]
-    #     queries.append(query)        
-    #     top_k_docs, all_docs = self.document_retrieval_model.forward(queries, doc_ids, self.p, self.k) 
-    #     top_k_docs=top_k_docs[0]  
-    #     rag_prompt = RAG_PROMPT.format(original_query = query, knowledge_base = "\n\n".join(top_k_docs))
-    #     responses=self.language_model(rag_prompt, SAMPLING_PARAMS_DICT).split("[/INST]")[-1]
-    #     q=[responses]
-    #     z=[]
-    #     l=[]
-    #     for i in top_k_docs:
-    #         l.append([i])
-    #     z.append(l)
-    #     rewards = [self.get_rewards(original_query, response) for response in responses]
+        start_time = time.time()
+        top_k_docs, all_docs = self.document_retrieval_model.train_batch(aug_queries)
+        print("len(all_docs): ", len(all_docs), flush=True)
+        print("len(all_docs)[0]: ", len(all_docs[0]), flush=True)
+        print("len(top_k_docs): ", len(top_k_docs), flush=True)
+        print("len(top_k_docs)[0]: ", len(top_k_docs[0]), flush=True)
+        doc_ret_time = time.time()-start_time
+        print("Doc retrieval time: ", str(doc_ret_time), flush=True)
 
-    #     [doc_ids_flat.extend([doc_id]*len(original_queries[i])) for i,doc_id in enumerate(doc_ids)]
+        start_time = time.time()
+        rag_prompts = self.get_rag_prompts(top_k_docs, original_queries)
+        print("len(rag_prompts): ", len(rag_prompts), flush=True)
+        answers, contri_docs = self.get_query_responses(rag_prompts, top_k_docs)
+        print("len(answers): ", len(answers), flush=True)
+        print("len(contri_docs): ", len(contri_docs), flush=True)
+        print("len(contri_docs[0]): ", len(contri_docs[0]), flush=True)
+        resp_gen_time = time.time()-start_time
+        print("Response generation time: ", str(resp_gen_time), flush=True)
+
+        # start_time = time.time()      
+        # rewards = self.get_rewards(answers, rag_prompts)  
+        # print("len(rewards): ", len(rewards))
+        # reward_gen_time = time.time()-start_time
+        # print("Reward generation time: ", str(reward_gen_time))
+
+        # gold_rewards = self.get_rewards(gold_answers, rag_prompts)
+        # print("len(gold_rewards): ", len(gold_rewards))  
         
-    #     count = tqdm(total=len(original_queries), desc='RAG Iterations', position=0)
-    #     for original_query, doc_id, gold_answer in zip(original_queries, doc_ids_flat, gold_answers): 
-    #         qa_prompt = QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query)
-    #         aug_queries = self.get_augmented_queries(qa_prompt, original_query)
-    #         top_k_docs, _ = self.document_retrieval_model.train(aug_queries, doc_id)
-    #         knowledge_base = []
-    #         ctr = 0
-    #         for doc in top_k_docs:
-    #             knowledge_base.append(f"Source {ctr+1}: {doc}")
-    #             ctr+=1
-            
-    #         rag_prompt = RAG_CITATION_PROMPT.format(original_query = original_query, knowledge_base = "\n\n".join(knowledge_base))
-    #         answer=self.language_model(rag_prompt).split("[/INST]")[-1]
-    #         try:
-    #             answer, sources = re.split("sources?\s?used", answer, flags=re.IGNORECASE)
-    #             source_list = re.findall("source.*\d+", sources, flags=re.I)
-    #             contri_docs.append(source_list)
-    #         except ValueError as e:
-    #             contri_docs.append([])
-    #             print("Response does not have correct sources format") 
-            
-    #         reward = self.get_rewards(original_query, answer, rag_prompt)
-    #         gold_reward = self.get_rewards(original_query, gold_answer)
-    #         prompts.append(rag_prompt)
-    #         answers.append(answer)
-    #         rewards.append(reward)
-    #         gold_rewards.append(gold_reward)
-    #         count.update(1)
-        
-        
-    #     return prompts, answers, rewards, gold_rewards, contri_docs
+        return rag_prompts, answers, [], [], contri_docs
 
     def generate_answer(self, original_queries, doc_ids, gold_answers):      
         print("="*30 + " Generating Answers " + "="*30)
@@ -248,9 +233,6 @@ class RAGPipeline:
         
         return prompts, answers, rewards, gold_rewards, contri_docs
         
-        
-
-
     def dpo_parsing(self,pp1,pp2):
         dataset = []
         for i in range(0,len(pp1)):
@@ -272,6 +254,7 @@ class RAGPipeline:
           
     def get_query_responses(self, rag_prompts, top_k_docs):
         responses=self.language_model(rag_prompts, num_return_sequences=self.l, batch_process=True, batch_size=self.answer_gen_batch_size)
+        # print("len(responses): ", len(responses))
 
         answers = []
         contri_docs = []
@@ -282,15 +265,18 @@ class RAGPipeline:
                 answer, sources = re.split("sources?\s?used", response, flags=re.IGNORECASE)
                 #TODO: Fall back to sentence similarity using llm's answer
                 source_list = re.findall("source.*\d+", sources, flags=re.I)
+                answers.append(answer)
+                contri_docs.append(source_list)
             except ValueError as e:
+                answers.append(response)
+                contri_docs.append([])
                 try:
                     with open("output/doc_citation_error.txt","a") as f:
                         f.write("Response does not have correct sources format:\nResponse:\n{0}".format(response.encode('utf-8')))
                 except:
                     with open("output/doc_citation_error.txt","w") as f:
                         f.write("Response does not have correct sources format:\nResponse:\n{0}".format(response.encode('utf-8')))
-            answers.append(answer)
-            contri_docs.append(source_list)
+            
 
         if self.training_mode == TrainingMode().SimiliarityScoreCitation:
             contri_docs = []
@@ -307,8 +293,6 @@ class RAGPipeline:
             
             doc_indx = np.where(scores > 0.5)[0]
             cited_documents.append(np.array(top_k_docs)[doc_indx])
-                
-   
         return cited_documents
 
     def get_rewards(self, answers, rag_prompts):
@@ -347,7 +331,6 @@ class RAGPipeline:
                     score_text = match.group(1)
                     score = self.text_to_number(score_text)
                     rewards.append(int(score)) # Convert score to integer
-                    print("reward: ", int(score))
                 else:
                     rewards.append(None)
                     try:
