@@ -4,7 +4,7 @@ from functools import partial
 from collections import defaultdict
    
 class DocumentRetrievalModel:
-    def __init__(self, k, p, path_to_index = "/scratch/workspace/arana_umass_edu-goldamn_project/400_docs_index"):
+    def __init__(self, k, p, path_to_index):
         # Initialize components specific to Document Retrieval
         self.path_to_index = path_to_index
         self.k = k
@@ -22,7 +22,25 @@ class DocumentRetrievalModel:
                 all_documents.append(row)
         return all_documents
         
-        
+    def train_batch(self, aug_queries):
+        # Logic to retrieve and return a list of documents based on the query
+        # Placeholder implementation
+        all_documents = []
+        top_k_documents = []
+        for doc_id, queries in aug_queries:
+            retrieved_docs = []
+            all_ranks = []
+            
+            for query in queries:
+                result = self.RAG.search(query=query, k=self.p, doc_ids=[doc_id])
+                   
+                for x in result:
+                    retrieved_docs.append(x['content'])
+                    all_ranks.append(x['rank'])  
+            all_documents.append(retrieved_docs)  
+            top_k_documents.append(self.reciprocal_rank_fusion(retrieved_docs, all_ranks))
+        return top_k_documents, all_documents
+      
     def train(self, aug_queries, doc_id):
         # Logic to retrieve and return a list of documents based on the query
         # Placeholder implementation
@@ -50,7 +68,7 @@ class DocumentRetrievalModel:
             param k: A constant added to the denominator in the RRF formula. Default is 60.
             return: A dictionary with item IDs as keys and their combined RRF scores as values.
         '''
-        all_documents = [item for sublist in all_documents for item in sublist]
+        # all_documents = [item for sublist in all_documents for item in sublist]
         rrf_scores = {}
         for item, rank in zip(all_documents, all_ranks):
             if item not in rrf_scores:

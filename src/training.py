@@ -4,17 +4,35 @@ import jsonlines
 import time
 import pandas as pd
 
-NUM_TRAIN_EPOCHS = 5
-model_config = {
-  "NumberOfRetrievedDocuments":8,
-  "NumberOfQuerySets":5,
-  "NumberOfAugementedQueries":5,
-  "NumberOfResponses":5,
-  "NumberOfTopkDocuments":5,
+NUM_TRAIN_EPOCHS = 3
+model_config = { 
+  "NumberOfRetrievedDocuments":5, #p
+  "NumberOfQuerySets":4, #m
+  "NumberOfAugementedQueries":4,#n
+  "NumberOfResponses":4, #l
+  "NumberOfTopkDocuments":4, #k
   "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.2', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
-  "TrainingMode":TrainingMode().SimiliarityScoreCitation
+  "TrainingMode":TrainingMode().ResponseWithCitation,
+  "QueryAugmentationBatchSize": 16,
+  "AnswerGenerationBtachSize": 8,
+  "RewardGenerationBtachSize": 8
 }
+
+# NUM_TRAIN_EPOCHS = 2
+# model_config = { 
+#   "NumberOfRetrievedDocuments":5, #p
+#   "NumberOfQuerySets":3, #m
+#   "NumberOfAugementedQueries":3,#n
+#   "NumberOfResponses":3, #l
+#   "NumberOfTopkDocuments":3, #k
+#   "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.2', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.1', # 'unsloth/mistral-7b-bnb-4bit'
+#   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
+#   "TrainingMode":TrainingMode().ResponseWithCitation,
+#   "QueryAugmentationBatchSize": 16,
+#   "AnswerGenerationBtachSize": 8,
+#   "RewardGenerationBtachSize": 8
+# }
 
 
 rag_pipeline = RAGPipeline(model_config)
@@ -35,13 +53,13 @@ rag_pipeline = RAGPipeline(model_config)
 # doc_ids = ["4c2ec99f83bc81396ff37d5e7abf9880b713a61fc0d6c7b5e1fce184653e226b"]
 
 
-df = pd.read_csv("data/train.csv")
+df = pd.read_csv("~/SelfRewardingRAG/data/mistral_basdeline_human_reward_annotations.csv")
 print("df.shape", df.shape)
-doc_ids = df['filename'].apply(lambda x: x.split('_response')[0])
+doc_ids = df['Document_ID'].apply(lambda x: x.split('_response')[0])
 for epoch in range(NUM_TRAIN_EPOCHS):
     start_time = time.time()
     print("=="*20 + " EPOCH " + str(epoch) + "=="*20)
-    rag_pipeline.train(df['question'],epoch,doc_ids=doc_ids)
+    rag_pipeline.train(df['Question'],epoch,doc_ids=doc_ids)
     end_time = time.time()
     execution_time = (end_time - start_time)/60
     print(f"Execution time: {execution_time} minutes")

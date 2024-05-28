@@ -1,5 +1,8 @@
 import random
+TRANSFORMERS_TOKEN = ""
 OUTPUT_DIRECTORY = "/home/arana_umass_edu/SelfRewardingRAG/output/"
+TRAIN_OUTPUT_DIRECTORY = "/scratch/workspace/arana_umass_edu-goldamn_project/training_output"
+PATH_TO_INDEX = "/scratch/workspace/arana_umass_edu-goldamn_project/400_docs_index"
 QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {original_query}. 
 
 - Each version of the query should be distinct and relevant to the original query.
@@ -51,14 +54,6 @@ After examining the user's instruction and the response:
 -Conclude with the score using the format: “Score: [0-5] out of 5”
 
 Remember to assess from a financial AI Assistant perspective. """
-
-SAMPLING_PARAMS_DICT = {
-            "temperature":0.7, 
-            "top_p":random.choice([0.99, 0.8, 0.7, 0.6, 0.5]), 
-            "repetition_penalty":random.choice([1.2, 1.3, 1.4, 1.5]), 
-            "min_new_tokens":random.choice([16, 32, 64, 128]), 
-            "max_new_tokens":random.choice([2016, 2032, 2064, 2128])
-          }
 
 EXTRACT_CITATION_PROMPT = """
 
