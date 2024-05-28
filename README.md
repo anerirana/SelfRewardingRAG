@@ -20,7 +20,27 @@ NOTE: Steps 1, 2, and, 5 above are specific to unity. To run the code efficientl
 
 `python indexing.py`
 
-NOTE: Uses default indexing location `/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database` accessible to all users in pi group `pi_dhruveshpate_umass_edu` 
+To increase the speed of indexing, a few small changes were made to the ragatouille/data/preprocessors.py file. Multiprocessing support was added to the llama_index_sentence_splitter function.
+The following code was added instead of the commented code.
+
+```
+    import multiprocess as mp
+
+    def process_docs(doc_id, doc):
+        chunks = [
+          {"document_id": doc_id, "content": node.text} for node in node_parser(doc)
+        ]
+        return chunks
+    with mp.Pool(processes=mp.cpu_count()) as pool:
+        results = pool.starmap(process_docs, zip(document_ids, docs))
+        chunks = [chunk for sublist in results for chunk in sublist]
+    # for doc_id, doc in zip(document_ids, docs):
+    #     chunks += [
+    #         {"document_id": doc_id, "content": node.text} for node in node_parser(doc)
+    #     ]
+```
+
+NOTE: Uses default indexing location in Unity - `/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database` accessible to all users in pi group `pi_dhruveshpate_umass_edu` 
 
 ## Training: 
 
