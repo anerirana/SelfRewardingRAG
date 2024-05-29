@@ -1,0 +1,9 @@
+transformers==4.40.2
+accelerate==0.27.2
+ragatouille==0.0.7.post9
+bs4==0.0.2
+trl==0.8.6
+xformers==0.0.25
+peft==0.10.0
+jsonlines==4.0.0
+rouge-score==0.1.2
