@@ -40,5 +40,3 @@ def doc_train_test_split(training_data_dir):
 
     for file_name in test_docs:    
         os.system("cp " + training_data_dir + " " + training_data_dir + "test_docs/")
-
-doc_train_test_split()
