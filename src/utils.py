@@ -8,16 +8,15 @@ def read_file_as_string(file_path):
         file_content = file.read()
     return file_content
 
-def doc_train_test_split(training_data=None):
-    training_data_dir = training_data if training_data else "/scratch/workspace/arana_umass_edu-goldamn_project/training_data/"
-    dir_path = training_data_dir + "credit_agreements_llm_responses_txt/"
+def doc_train_test_split(training_data_dir):
+    training_data_dir = training_data_dir
     file_name_template = "{doc_id}_response.txt"
-    file_names = os.listdir(dir_path)
+    file_names = os.listdir(training_data_dir)
     docs_with_sources = []
     docs_without_sources = []
     docs_with_error = []
     for file_name in file_names:
-        file_content = read_file_as_string(dir_path + file_name)
+        file_content = read_file_as_string(training_data_dir + file_name)
         if re.search(r'error in calling llm', file_content, flags=re.I):
             docs_with_error.append(file_name)
         elif re.search(r'source_passages', file_content, flags=re.I) or re.search(r'\*\*Source Passage(s)?:\*\*', file_content, flags=re.I):
@@ -37,9 +36,9 @@ def doc_train_test_split(training_data=None):
     print("len of test_docs: ", len(test_docs))
 
     for file_name in train_docs:    
-        os.system("cp " + dir_path + file_name + " " + training_data_dir + "train_docs/")
+        os.system("cp " + training_data_dir + " " + training_data_dir + "train_docs/")
 
     for file_name in test_docs:    
-        os.system("cp " + dir_path + file_name + " " + training_data_dir + "test_docs/")
+        os.system("cp " + training_data_dir + " " + training_data_dir + "test_docs/")
 
 doc_train_test_split()
