@@ -18,7 +18,19 @@ NOTE: Steps 1, 2, and, 5 above are specific to unity. To run the code efficientl
 
 ## Indexing:
 
-`python indexing.py`
+```
+usage: python indexing.py [-h] [--new_index] [--not-new_index] dir_path index_path
+
+Process input directory
+
+positional arguments:
+  dir_path         The path to the directory containing credit agreements
+  index_path       The path to the index for the credit agreement database
+
+optional arguments:
+  --new_index      Flag to indicate if a new index should be created (default: True)
+  --not-new_index  Flag to indicate if a new index should not be created
+```
 
 To increase the speed of indexing, a few small changes were made to the ragatouille/data/preprocessors.py file. Multiprocessing support was added to the llama_index_sentence_splitter function.
 The following code was added instead of the commented code.
@@ -40,7 +52,6 @@ The following code was added instead of the commented code.
     #     ]
 ```
 
-NOTE: Uses default indexing location in Unity - `/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database` accessible to all users in pi group `pi_dhruveshpate_umass_edu` 
 
 ## Training: 
 
