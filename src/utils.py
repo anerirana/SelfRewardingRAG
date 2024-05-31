@@ -8,8 +8,8 @@ def read_file_as_string(file_path):
         file_content = file.read()
     return file_content
 
-def doc_train_test_split():
-    training_data_dir = "/scratch/workspace/arana_umass_edu-goldamn_project/training_data/"
+def doc_train_test_split(training_data=None):
+    training_data_dir = training_data if training_data else "/scratch/workspace/arana_umass_edu-goldamn_project/training_data/"
     dir_path = training_data_dir + "credit_agreements_llm_responses_txt/"
     file_name_template = "{doc_id}_response.txt"
     file_names = os.listdir(dir_path)
