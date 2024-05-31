@@ -5,7 +5,7 @@ from functools import partial
 from os import listdir
 from tqdm import tqdm
 import argparse
-
+from src.utils import read_file_as_string
 
 # from bs4 import BeautifulSoup
 

@@ -42,4 +42,4 @@ def doc_train_test_split():
     for file_name in test_docs:    
         os.system("cp " + dir_path + file_name + " " + training_data_dir + "test_docs/")
 
-doc_train_test_split()
+# doc_train_test_split()
