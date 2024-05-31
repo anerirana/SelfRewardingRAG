@@ -4,7 +4,7 @@ import time
 from functools import partial
 from os import listdir
 from tqdm import tqdm
-from src.utils import *
+import argparse
 
 
 # from bs4 import BeautifulSoup
@@ -95,10 +95,18 @@ def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database", new
 
 
 if __name__ == "__main__":
-    dir_path = '/scratch/workspace/arana_umass_edu-goldamn_project/data/new_txt_extracts/' 
+    parser = argparse.ArgumentParser(description="Process input directory")
+    parser.add_argument('dir_path', type=str, help='The path to the directory containing credit agreements', required=True)
+    parser.add_argument('index_path', type=str, help='The path to the index for the credit agreement database', required=True)
+    parser.add_argument('--new_index', dest='new_index', action='store_true', help='Flag to indicate if a new index should be created (default: True)')
+    parser.add_argument('--not-new_index', dest='new_index', action='store_false', help='Flag to indicate if a new index should not be created')
+    parser.set_defaults(new_index=True)
+    
+    args = parser.parse_args()
+    
     start_time = time.time()
-    fetch_docs_from_text(dir_path, 
-    index_path="/scratch/workspace/arana_umass_edu-goldamn_project/credit_agreement_database_val_and_test")
+    
+    fetch_docs_from_text(args.dir_path, index_path=args.index_path, new_index=args.new_index)
     end_time = time.time()
     execution_time = (end_time - start_time)/60
     print(f"Execution time: {execution_time} minutes")
