@@ -96,8 +96,8 @@ def fetch_docs_from_text(dir_path, index_path="./credit_agreement_database", new
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process input directory")
-    parser.add_argument('dir_path', type=str, help='The path to the directory containing credit agreements', required=True)
-    parser.add_argument('index_path', type=str, help='The path to the index for the credit agreement database', required=True)
+    parser.add_argument('dir_path', type=str, help='The path to the directory containing credit agreements')
+    parser.add_argument('index_path', type=str, help='The path to the index for the credit agreement database')
     parser.add_argument('--new_index', dest='new_index', action='store_true', help='Flag to indicate if a new index should be created (default: True)')
     parser.add_argument('--not-new_index', dest='new_index', action='store_false', help='Flag to indicate if a new index should not be created')
     parser.set_defaults(new_index=True)
