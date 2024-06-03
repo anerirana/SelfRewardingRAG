@@ -9,9 +9,10 @@ Steps for setting up a working environment:
 4. conda activate SelfRewardRAGEnv
 5. module load cuda/11.8.0
 6. pip install -r requirements.txt
+7. pip install faiss-gpu & pip uninstall --y faiss-cpu
 
 <!--- When using unsloth for PEFT DPO training--->
-<!--- pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git" & pip install faiss-gpu & pip uninstall --y faiss-cpu--->
+<!--- pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"--->
 
 NOTE: Steps 1, 2, and, 5 above are specific to unity. To run the code efficiently without unity, a local GPU setup is required.
 
