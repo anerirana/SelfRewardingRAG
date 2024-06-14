@@ -4,7 +4,7 @@ import json
 import os
 
 def create_text_row(instruction, output):
-    text_row = f"""<s>[INST]{RAG_PROMPT.format(knowledge_base = "", original_query = instruction)}[/INST] {output} </s>"""
+    text_row = f"""<s>[INST]{RAG_CITATION_PROMPT.format(knowledge_base = "", original_query = instruction)}[/INST] {output} </s>"""
     return text_row
 
 def process_jsonl_file(output_file_path):

@@ -28,25 +28,44 @@ class TrainingMode:
 
 class RAGPipeline:
     def __init__(self, config: dict):
-        '''Executes each block of RAGPipeline to train query augmentation and RAG models
+        '''Executes each block of RAGPipeline to train the LLM model in all the tasks
 
-        Parameters:
-        -----------
-        num_documents
-            Numnber of docuemts to retrieve per query by the Document Retrieval Model 
+        Configuration Parameters:
+        -----------        
+        NumberOfRetrievedDocuments
+            Number of documented retrieved for each augmented query i.e. 'p'. Default value is 5.
+        NumberOfQuerySets
+            Number of augmented query sets to create i.e. 'm'. Default value is 5.
+        NumberOfAugementedQueries
+            Number of augmented queries to generate in each query set i.e. 'n'. Default value is 5.
+        NumberOfResponses
+            Number of responses to sample for a given prompt i.e. 'l'. Default value is 5.
+        NumberOfTopkDocuments
+            Number of top-k documents to select for an original query after rank fusion of documents from all augmented queries in a set i.e. 'k'. Default value is 5.
+        LanguageModelName
+            Name of the baseline language model to train. Default value is 'mistralai/Mistral-7B-Instruct-v0.2'.
+        CitationModelName
+            A sentence transformer model to calcualte cosine similarity scores. Only applicable when TrainingMode is 'SimiliarityScoreCitation'.  Default value is 'sentence-transformers/all-mpnet-base-v2'
+        TrainingMode
+            To perform experiments with different training modes i.e. 'ResponseWithCitation' and 'SimiliarityScoreCitation'. Default value is 'TrainingMode().ResponseWithCitation'.
+        QueryAugmentationBatchSize
+            Batch Size for query augmentation generation. Default value is 16.
+        AnswerGenerationBtachSize
+            Batch Size for retrieval augemented generation. Default value is 8.
+        RewardGenerationBtachSize
+            Batch Size for reward prediction on generated answers. Default value is 8.
         '''
         self.p = default(config.get('NumberOfRetrievedDocuments'), 5)
         self.m = default(config.get('NumberOfQuerySets'), 5)
         self.n = default(config.get('NumberOfAugementedQueries'), 5)
         self.l = default(config.get('NumberOfResponses'), 5)
         self.k = default(config.get('NumberOfTopkDocuments'), 5)
-        
-        self.query_aug_batch_size = default(config.get('QueryAugmentationBatchSize'), 16)
-        self.answer_gen_batch_size = default(config.get('AnswerGenerationBtachSize'), 8)
-        self.reward_gen_batch_size = default(config.get('RewardGenerationBtachSize'), 8)
         self.language_model = LLM(default(config.get('LanguageModelName'), 'mistralai/Mistral-7B-Instruct-v0.2'))
         self.citation_model = SentenceTransformer(default(config.get('CitationModelName'), 'sentence-transformers/all-mpnet-base-v2'))
         self.training_mode = default(config.get('TrainingMode'), TrainingMode().SimiliarityScoreCitation)
+        self.query_aug_batch_size = default(config.get('QueryAugmentationBatchSize'), 16)
+        self.answer_gen_batch_size = default(config.get('AnswerGenerationBtachSize'), 8)
+        self.reward_gen_batch_size = default(config.get('RewardGenerationBtachSize'), 8)
 
         self.document_retrieval_model = DocumentRetrievalModel(self.k, self.p, PATH_TO_INDEX)   
         self.pp_generator = PreferencePairGenerator(self.language_model, self.m, self.n, self.l)
@@ -59,49 +78,56 @@ class RAGPipeline:
 
         Parameters:
         -----------
-        original_query
-            The original query to generate responses for
+        original_queries (list)
+            The seed set of original queries to began self-training
         '''
         dpo_dataset_dict = {}
         # f = open(OUTPUT_DIRECTORY + "all_variables_epoch_" + str(epoch) + ".txt","x")
 
         start_time = time.time()
         qa_prompts = [QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query) for original_query in original_queries]
-        print("len(qa_prompts): ", len(qa_prompts), flush=True) # len(original_queries)
-        aug_queries = self.get_augmented_queries(qa_prompts, original_queries, doc_ids)
-        print("len(aug_queries): ", len(aug_queries), flush=True)
+        # num of original_queries (z)
+        print("Total numer of query augmentation prompts = ", len(qa_prompts))
+        aug_queries_with_doc_id = self.get_augmented_queries(qa_prompts, original_queries, doc_ids)
+        # z * m * n
+        print("Total number of augmented queries generated = ", len(aug_queries_with_doc_id) * len(aug_queries_with_doc_id[0][1]), flush=True)
         query_aug_time = time.time()-start_time
-        print("Query aug time: ", str(query_aug_time), flush=True)
+        print("Execution time for query augmentation: ", str(query_aug_time), flush=True)
 
         start_time = time.time()
-        top_k_docs, all_docs = self.document_retrieval_model.train_batch(aug_queries)
-        print("len(all_docs): ", len(all_docs), flush=True)
-        print("len(all_docs)[0]: ", len(all_docs[0]), flush=True)
-        print("len(top_k_docs): ", len(top_k_docs), flush=True)
-        print("len(top_k_docs)[0]: ", len(top_k_docs[0]), flush=True)
+        top_k_docs, all_docs = self.document_retrieval_model.train(aug_queries_with_doc_id)
+        # (z * m) x (n * p)
+        print("The shape of all the retrieved documents = {0} x {1}".format(len(all_docs), len(all_docs[0])), flush=True)
+        # (z * m) x (k)
+        print("The shape of the top-k retrieved documents = {0} x {1}".format(len(top_k_docs), len(top_k_docs[0])), flush=True)
         doc_ret_time = time.time()-start_time
-        print("Doc retrieval time: ", str(doc_ret_time), flush=True)
+        print("Execution time for document retrieval: ", str(doc_ret_time), flush=True)
 
         start_time = time.time()
         rag_prompts = self.get_rag_prompts(top_k_docs, original_queries)
-        print("len(rag_prompts): ", len(rag_prompts), flush=True)
+        # z * m
+        print("Total numer of RAG prompts = ", len(rag_prompts), flush=True)
         answers, contri_docs = self.get_query_responses(rag_prompts, top_k_docs)
-        print("len(answers): ", len(answers), flush=True)
-        print("len(contri_docs): ", len(contri_docs), flush=True)
-        print("len(contri_docs[0]): ", len(contri_docs[0]), flush=True)
+        # z * m * l
+        print("Total number of responses generated = ", len(answers), flush=True)
+        # z * m * l
+        print("Total number of contributing documents sets for all generated responses = ", len(contri_docs), flush=True)
+        # print("len(contri_docs[0]): ", len(contri_docs[0]), flush=True)
         resp_gen_time = time.time()-start_time
-        print("Response generation time: ", str(resp_gen_time), flush=True)
+        print("Execution time for response generation: ", str(resp_gen_time), flush=True)
 
         start_time = time.time()      
-        rewards = self.get_rewards(answers, rag_prompts)  
-        print("len(rewards): ", len(rewards), flush=True)
+        rewards = self.get_rewards(answers, rag_prompts) 
+         # z * m * l
+        print("Total number of rewards generated = ", len(rewards), flush=True)
         reward_gen_time = time.time()-start_time
-        print("Reward generation time: ", str(reward_gen_time), flush=True)
+        print("Execution time for reward generation: ", str(reward_gen_time), flush=True)
 
         pp1 = self.pp_generator.generateFirstPP(rag_prompts, answers, rewards)
-        print("numer of preference pairs type 1: ", len(pp1), flush=True)
-        pp2 = self.pp_generator.generateSecondPP(qa_prompts, aug_queries, all_docs, top_k_docs, rewards, contri_docs)
-        print("numer of preference pairs type 2: ", len(pp2), flush=True)      
+        print("Numer of preference pairs of type 1: ", len(pp1), flush=True)
+        # pp2 = []
+        pp2 = self.pp_generator.generateSecondPP(qa_prompts, aug_queries_with_doc_id, all_docs, top_k_docs, rewards, contri_docs)
+        print("Numer of preference pairs of type 2: ", len(pp2), flush=True)      
             
         dpo_dataset_dict = self.dpo_parsing(pp1,pp2)
                 
@@ -112,6 +138,14 @@ class RAGPipeline:
         self.language_model.train(epoch)
   
     def get_rag_prompts(self, top_k_docs, original_queries):
+        '''Formats the RAG prompt with the questions and retrieved documents to generate answers
+
+        Parameters:
+        -----------
+        original_queries (list)
+            The seed set of original queries to began self-training
+        top_k_docs
+        '''
         rag_prompts = []
         for i,docs in enumerate(top_k_docs):
             original_query = original_queries[i//self.m]
@@ -157,14 +191,14 @@ class RAGPipeline:
         start_time = time.time()
         qa_prompts = [QUERY_AUGMENTATION_PROMPT.format(n=self.n-1, original_query=original_query) for original_query in original_queries]
         print("len(qa_prompts): ", len(qa_prompts), flush=True) #x
-        aug_queries = self.get_augmented_queries(qa_prompts, original_queries, doc_ids)
-        print("len(aug_queries): ", len(aug_queries), flush=True) # x * m
-        print("len(aug_queries[0][1]):", len(aug_queries[0][1]), flush=True)
+        aug_queries_with_doc_id = self.get_augmented_queries(qa_prompts, original_queries, doc_ids)
+        print("len(aug_queries_with_doc_id): ", len(aug_queries_with_doc_id), flush=True) # x * m
+        print("len(aug_queries_with_doc_id[0][1]):", len(aug_queries_with_doc_id[0][1]), flush=True)
         query_aug_time = time.time()-start_time
         print("Query aug time: ", str(query_aug_time), flush=True)
 
         start_time = time.time()
-        top_k_docs, all_docs = self.document_retrieval_model.train_batch(aug_queries)
+        top_k_docs, all_docs = self.document_retrieval_model.train(aug_queries_with_doc_id)
         print("len(all_docs): ", len(all_docs), flush=True)
         print("len(all_docs)[0]: ", len(all_docs[0]), flush=True)
         print("len(top_k_docs): ", len(top_k_docs), flush=True)
@@ -253,6 +287,9 @@ class RAGPipeline:
         return [len(lst)] + self.find_list_dimensions(lst[0])
           
     def get_query_responses(self, rag_prompts, top_k_docs):
+        '''
+        Generates responses for the given list of retrieval augmented prompts
+        '''
         responses=self.language_model(rag_prompts, num_return_sequences=self.l, batch_process=True, batch_size=self.answer_gen_batch_size)
         # print("len(responses): ", len(responses))
 
@@ -296,6 +333,9 @@ class RAGPipeline:
         return cited_documents
 
     def get_rewards(self, answers, rag_prompts):
+        '''
+        Generates rewards using LLM-as-a-judge for the given answers and the corresponding RAG prompts used.
+        '''
         reward_prompts = [REWARD_PROMPT.format(original_query = rag_prompts[i//self.l], answer = answer) for i,answer in enumerate(answers)]
         reward_responses = self.language_model(reward_prompts, batch_process=True, batch_size=self.reward_gen_batch_size)
         

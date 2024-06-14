@@ -1,27 +1,24 @@
 import random
-TRANSFORMERS_TOKEN = ""
+# Create a user access token from your HuggingFace account.
+TRANSFORMERS_TOKEN = "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"
+
+# Provide the path to an output directory for saving output and error files from training and evaluation.
 OUTPUT_DIRECTORY = "/home/arana_umass_edu/SelfRewardingRAG/output/"
+
+# Provide the path to a directory for saving the fine tuned model, its checkpoints and configuration.
 TRAIN_OUTPUT_DIRECTORY = "/scratch/workspace/arana_umass_edu-goldamn_project/training_output"
-PATH_TO_INDEX = "/scratch/workspace/arana_umass_edu-goldamn_project/400_docs_index"
-QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the query: {original_query}. 
 
-- Each version of the query should be distinct and relevant to the original query.
-- Itemize each query with a number and a period (e.g. "1. ").
+# Provide the path to the Ragatouille index directory.
+PATH_TO_INDEX = "/scratch/workspace/arana_umass_edu-goldamn_project/400_documents_database"
+
+# Prompt used to generate 'n' augmentations for a given question
+QUERY_AUGMENTATION_PROMPT = """Generate {n} different versions of the question: {original_query}. 
+
+- Each version of the question should be distinct and relevant to the original question.
+- Itemize each question with a number and a period (e.g. "1. ").
 """
 
-RAG_PROMPT = """
-Answer the folowing question using the knowledge base provided.  
-
-#Rules to answer:
-- Provide a concise, well-formatted response to the user's question.
-- The response should be in bullet points if needed.
-
-Knowledge Base: 
-\"{knowledge_base}\"
-
-Question : \"{original_query}\"
-"""
-
+# Prompt used for retrieval augmented answer generation for the given question and the retireved knowledge base
 RAG_CITATION_PROMPT = """Answer the question using the following rules and knowledge base provided. 
 
 Rules:
@@ -35,6 +32,7 @@ Knowledge Base:
 Question : \"{original_query}\"
 """
 
+# Prompt used to generate reward for the given question and response using LLM-as-a-judge 
 REWARD_PROMPT = """Review the user's question with the provided knowledge base and the corresponding response using the additive 5-point scoring system described below. Points are accumulated based on the satisfaction of each criterion:
 
 - Give 0 points if the response is completely irrelevant.
@@ -55,6 +53,8 @@ After examining the user's instruction and the response:
 
 Remember to assess from a financial AI Assistant perspective. """
 
+# Prompts the LLM model to generate citations for the given answer from the knowlege base
+# Only used for ablation studies
 EXTRACT_CITATION_PROMPT = """
 
 User Question: {original_query}

@@ -90,7 +90,7 @@ class PreferencePairGenerator:
         return min_value, min_idx
 
     def generateFirstPP(self, rag_prompts, answers, rewards):
-        '''Generates the first preference pair matrix
+        '''Generates the first type of preference pair matrix
         '''
         pref_pairs = []
         for i,rag_prompt in enumerate(rag_prompts):
@@ -109,7 +109,7 @@ class PreferencePairGenerator:
         return pref_pairs
 
     def generateSecondPP(self, qa_prompts, aug_queries, all_docs, top_k_docs, all_rewards, contri_docs):
-        '''generate the second preference pair matrix
+        '''Generates the second type of preference pair matrix
         '''
         pairs = []
         for i, qa_prompt in enumerate(qa_prompts): 

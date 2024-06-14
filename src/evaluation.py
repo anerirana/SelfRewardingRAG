@@ -12,7 +12,7 @@ model_config = {
   "NumberOfAugementedQueries":4,#n
   "NumberOfResponses":1, #l
   "NumberOfTopkDocuments":4, #k
-  "LanguageModelName":'mistralai/Mistral-7B-Instruct-v0.2', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.2', # 'unsloth/mistral-7b-bnb-4bit'
+  "LanguageModelName": TRAIN_OUTPUT_DIRECTORY + '/mistral-v2-finetuned_0', #'mistralai/Mistral-7B-Instruct-v0.2', # 'Nexusflow/Starling-LM-7B-beta' #'mistralai/Mistral-7B-Instruct-v0.2', # 'unsloth/mistral-7b-bnb-4bit'
   "CitationModelName":'sentence-transformers/all-mpnet-base-v2',
   "TrainingMode":TrainingMode().ResponseWithCitation,
   "QueryAugmentationBatchSize": 16,
@@ -37,7 +37,7 @@ rag_pipeline = RAGPipeline(model_config)
 
 start_time = time.time()
 
-df = pd.read_csv("/home/ppruthi_umass_edu/SelfRewardingRAG/data/mistral_basdeline_human_reward_annotations.csv")[:100]
+df = pd.read_csv("~/SelfRewardingRAG/data/mistral_basdeline_human_reward_annotations.csv")[:100]
 print("df.shape", df.shape)
 
 doc_ids = np.asarray(df['Document_ID'].apply(lambda x: x.split('_response')[0]))

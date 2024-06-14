@@ -22,12 +22,18 @@ class DocumentRetrievalModel:
                 all_documents.append(row)
         return all_documents
         
-    def train_batch(self, aug_queries):
-        # Logic to retrieve and return a list of documents based on the query
-        # Placeholder implementation
+    def train(self, aug_queries_with_doc_id):
+        '''
+        Retrieves and returns all the retrieved and top-k document chunks for the given augmented queries
+
+        Parameters:
+        -----------
+        aug_queries_with_doc_id (tuple)
+            A tuple of document ids and corresponding list of augmented queries.
+        '''
         all_documents = []
         top_k_documents = []
-        for doc_id, queries in aug_queries:
+        for doc_id, queries in aug_queries_with_doc_id:
             retrieved_docs = []
             all_ranks = []
             
@@ -40,22 +46,6 @@ class DocumentRetrievalModel:
             all_documents.append(retrieved_docs)  
             top_k_documents.append(self.reciprocal_rank_fusion(retrieved_docs, all_ranks))
         return top_k_documents, all_documents
-      
-    def train(self, aug_queries, doc_id):
-        # Logic to retrieve and return a list of documents based on the query
-        # Placeholder implementation
-        all_documents = []
-        all_ranks = []
-        for query in aug_queries:   
-            result = self.RAG.search(query=query, k=self.p, doc_ids=[doc_id])
-            row = []      
-            for x in result:
-                row.append(x['content'])
-                all_ranks.append(x['rank'])               
-            all_documents.append(row)
-            
-        top_k_documents = self.reciprocal_rank_fusion(all_documents, all_ranks)
-        return top_k_documents, all_documents
     
     def reciprocal_rank_fusion(self, all_documents, all_ranks):
         '''
@@ -64,9 +54,9 @@ class DocumentRetrievalModel:
         
         Parameters:
         -----------
-            param rank_lists: A list of lists, where each inner list represents a rank list.
-            param k: A constant added to the denominator in the RRF formula. Default is 60.
-            return: A dictionary with item IDs as keys and their combined RRF scores as values.
+            all_documents: A list of lists, where each inner list represents a ranked list of documents ids.
+            all_ranks: A list of lists, where each inner list represents the ranks of list of documents ids.
+            return: A dictionary of document ids sorted by their combined RRF scores.
         '''
         # all_documents = [item for sublist in all_documents for item in sublist]
         rrf_scores = {}

@@ -53,7 +53,7 @@ rag_pipeline = RAGPipeline(model_config)
 # doc_ids = ["4c2ec99f83bc81396ff37d5e7abf9880b713a61fc0d6c7b5e1fce184653e226b"]
 
 
-df = pd.read_csv("~/SelfRewardingRAG/data/mistral_basdeline_human_reward_annotations.csv")
+df = pd.read_csv("~/SelfRewardingRAG/data/mistral_basdeline_human_reward_annotations.csv")[:100]
 print("df.shape", df.shape)
 doc_ids = df['Document_ID'].apply(lambda x: x.split('_response')[0])
 for epoch in range(NUM_TRAIN_EPOCHS):
