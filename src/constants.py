@@ -1,6 +1,6 @@
 import random
 # Create a user access token from your HuggingFace account.
-TRANSFORMERS_TOKEN = "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"
+TRANSFORMERS_TOKEN = ""
 
 # Provide the path to an output directory for saving output and error files from training and evaluation.
 OUTPUT_DIRECTORY = "/home/arana_umass_edu/SelfRewardingRAG/output/"
